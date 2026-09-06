@@ -4,6 +4,17 @@ import { EXAMPLE_PROMPTS, generateApp, type GenerateResult } from './lib/generat
 import { generateStoryScene } from './lib/storyScene';
 import { tryLlmGenerateStream } from './lib/streamHtml';
 import {
+  EMPTY_WORLD_MEMORY,
+  addChip,
+  clearStoryDraft,
+  extractWorldMemory,
+  loadStoryDraft,
+  mergeWorldMemory,
+  removeChip,
+  saveStoryDraft,
+  type WorldMemory,
+} from './lib/worldMemory';
+import {
   createSpeechRecognition,
   isSpeechSupported,
   transcriptsFromEvent,
@@ -40,6 +51,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
 type LlmGenerateOpts = {
   priorHtml?: string;
   mode?: 'forge' | 'story';
+  worldMemory?: WorldMemory;
   signal?: AbortSignal;
 };
 
@@ -54,6 +66,7 @@ async function tryLlmGenerate(
       prompt,
       priorHtml: opts.priorHtml,
       mode: opts.mode ?? 'forge',
+      worldMemory: opts.worldMemory,
     }),
     signal: opts.signal,
   });
@@ -139,6 +152,16 @@ export default function App() {
   const [storyQueued, setStoryQueued] = useState(false);
   const [storyListening, setStoryListening] = useState(false);
   const [speechSupported] = useState(() => isSpeechSupported());
+  const [worldMemory, setWorldMemory] = useState<WorldMemory>(() => ({
+    ...EMPTY_WORLD_MEMORY,
+  }));
+  const [memoryChipDraft, setMemoryChipDraft] = useState({
+    characters: '',
+    setting: '',
+    props: '',
+  });
+  const [memoryMoodDraft, setMemoryMoodDraft] = useState('');
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   const debounceRef = useRef<number | null>(null);
   const storyDebounceRef = useRef<number | null>(null);
@@ -150,6 +173,7 @@ export default function App() {
   const storyCommittedHtmlRef = useRef('');
   const storyTextRef = useRef('');
   const storyDraftRef = useRef('');
+  const worldMemoryRef = useRef<WorldMemory>({ ...EMPTY_WORLD_MEMORY });
   const speechRecRef = useRef<SpeechRec | null>(null);
   const speechBaseDraftRef = useRef('');
   const previewBlobRef = useRef<string | null>(null);
@@ -173,6 +197,43 @@ export default function App() {
   useEffect(() => {
     storyDraftRef.current = storyDraft;
   }, [storyDraft]);
+
+  useEffect(() => {
+    worldMemoryRef.current = worldMemory;
+  }, [worldMemory]);
+
+  // Restore StoryForge draft (story + world bible) once
+  useEffect(() => {
+    const draft = loadStoryDraft();
+    if (draft?.storyText.trim()) {
+      setStoryText(draft.storyText);
+      storyTextRef.current = draft.storyText;
+      const beats = draft.storyText
+        .split(/\n+/)
+        .map((b) => b.trim())
+        .filter(Boolean);
+      setStoryBeats(beats);
+      setWorldMemory(draft.worldMemory);
+      worldMemoryRef.current = draft.worldMemory;
+      setMemoryMoodDraft(draft.worldMemory.mood || '');
+      if (draft.storyTitle) setStoryTitle(draft.storyTitle);
+    }
+    setDraftHydrated(true);
+  }, []);
+
+  // Persist story draft + world memory while in session
+  useEffect(() => {
+    if (!draftHydrated) return;
+    if (!storyText.trim() && !worldMemory.characters.length && !worldMemory.setting.length && !worldMemory.props.length && !worldMemory.mood.trim()) {
+      clearStoryDraft();
+      return;
+    }
+    saveStoryDraft({
+      storyText,
+      worldMemory,
+      storyTitle,
+    });
+  }, [draftHydrated, storyText, worldMemory, storyTitle]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -249,6 +310,14 @@ export default function App() {
         setStoryHtml(prior);
         storyHtmlRef.current = prior;
       }
+
+      // Refresh living world bible from story (merge keeps manual chips)
+      const derived = extractWorldMemory(trimmed);
+      const memory = mergeWorldMemory(worldMemoryRef.current, derived);
+      worldMemoryRef.current = memory;
+      setWorldMemory(memory);
+      if (memory.mood) setMemoryMoodDraft(memory.mood);
+
       let gen: GenerateResult;
       let usedFallback = false;
 
@@ -264,6 +333,7 @@ export default function App() {
           gen = await tryLlmGenerateStream(trimmed, {
             mode: 'story',
             priorHtml: prior,
+            worldMemory: memory,
             signal: ac.signal,
             onMeta: ({ model }) => {
               if (ticket !== storyTicketRef.current) return;
@@ -286,11 +356,12 @@ export default function App() {
             gen = await tryLlmGenerate(trimmed, {
               mode: 'story',
               priorHtml: prior,
+              worldMemory: memory,
               signal: ac.signal,
             });
           } catch (err) {
             if (isAbort(err)) return;
-            gen = generateStoryScene(trimmed);
+            gen = generateStoryScene(trimmed, memory);
             usedFallback = true;
           }
         }
@@ -487,6 +558,10 @@ export default function App() {
       setStoryTitle(rec.title);
       storyHtmlRef.current = rec.html;
       storyCommittedHtmlRef.current = rec.html;
+      const mem = extractWorldMemory(rec.prompt);
+      setWorldMemory(mem);
+      worldMemoryRef.current = mem;
+      setMemoryMoodDraft(mem.mood || '');
       setView('story');
       showToast('Reopened StoryForge scene');
       return;
@@ -600,6 +675,58 @@ export default function App() {
     }
   };
 
+
+  const commitMemoryChip = (
+    field: 'characters' | 'setting' | 'props',
+    raw?: string,
+  ) => {
+    const value = (raw ?? memoryChipDraft[field]).trim();
+    if (!value) return;
+    setWorldMemory((prev) => {
+      const next = { ...prev, [field]: addChip(prev[field], value) };
+      worldMemoryRef.current = next;
+      return next;
+    });
+    setMemoryChipDraft((d) => ({ ...d, [field]: '' }));
+  };
+
+  const dropMemoryChip = (
+    field: 'characters' | 'setting' | 'props',
+    value: string,
+  ) => {
+    setWorldMemory((prev) => {
+      const next = { ...prev, [field]: removeChip(prev[field], value) };
+      worldMemoryRef.current = next;
+      return next;
+    });
+  };
+
+  const onMoodCommit = (value: string) => {
+    const mood = value.trim();
+    setMemoryMoodDraft(mood);
+    setWorldMemory((prev) => {
+      const next = { ...prev, mood };
+      worldMemoryRef.current = next;
+      return next;
+    });
+  };
+
+  const rederiveMemory = () => {
+    const derived = extractWorldMemory(storyTextRef.current);
+    setWorldMemory(derived);
+    worldMemoryRef.current = derived;
+    setMemoryMoodDraft(derived.mood || '');
+    showToast('World bible re-derived from story');
+  };
+
+  const clearMemory = () => {
+    setWorldMemory({ ...EMPTY_WORLD_MEMORY });
+    worldMemoryRef.current = { ...EMPTY_WORLD_MEMORY };
+    setMemoryMoodDraft('');
+    setMemoryChipDraft({ characters: '', setting: '', props: '' });
+    showToast('World bible cleared');
+  };
+
   const loadStoryExample = () => {
     stopSpeech();
     const demo = STORY_EXAMPLES.join('\n\n');
@@ -617,6 +744,11 @@ export default function App() {
     setStoryHtml('');
     storyHtmlRef.current = '';
     storyCommittedHtmlRef.current = '';
+    const fresh = extractWorldMemory(demo);
+    setWorldMemory(fresh);
+    worldMemoryRef.current = fresh;
+    setMemoryMoodDraft(fresh.mood || '');
+    setMemoryChipDraft({ characters: '', setting: '', props: '' });
     setStoryTitle('StoryForge');
     setStoryUsedFallback(false);
     setStoryModel(undefined);
@@ -868,6 +1000,11 @@ export default function App() {
                 ·
               </span>
               <span className="studio-status-beats">{storyBeats.length} beats</span>
+              <span className="studio-status-beats">
+                · {worldMemory.characters.length + worldMemory.setting.length + worldMemory.props.length}
+                {' '}
+                bible
+              </span>
               {storyStreaming ? (
                 <span className="scene-streaming" aria-live="polite">
                   scene streaming…
@@ -897,6 +1034,94 @@ export default function App() {
                   Tell a story. The live preview streams in as the model writes HTML — clicks in the
                   scene should change state, not sit as costume stubs.
                 </p>
+
+                <div className="world-bible" aria-label="World bible">
+                  <div className="world-bible-header">
+                    <span className="world-bible-title">World bible</span>
+                    <span className="world-bible-meta">continuity · editable</span>
+                    <div className="world-bible-actions">
+                      <button
+                        type="button"
+                        className="pane-action"
+                        onClick={rederiveMemory}
+                        title="Re-derive chips from story text"
+                      >
+                        Re-derive
+                      </button>
+                      <button
+                        type="button"
+                        className="pane-action"
+                        onClick={clearMemory}
+                        title="Clear world bible"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  {(
+                    [
+                      ['characters', 'Characters', 'Add character…'],
+                      ['setting', 'Setting', 'Add place…'],
+                      ['props', 'Props', 'Add prop…'],
+                    ] as const
+                  ).map(([field, label, placeholder]) => (
+                    <div key={field} className="world-row">
+                      <span className="world-row-label">{label}</span>
+                      <div className="world-chips">
+                        {worldMemory[field].map((chip) => (
+                          <button
+                            key={`${field}-${chip}`}
+                            type="button"
+                            className="world-chip"
+                            onClick={() => dropMemoryChip(field, chip)}
+                            title={`Remove ${chip}`}
+                          >
+                            {chip}
+                            <span aria-hidden>×</span>
+                          </button>
+                        ))}
+                        <input
+                          type="text"
+                          className="world-chip-input"
+                          value={memoryChipDraft[field]}
+                          placeholder={placeholder}
+                          aria-label={label}
+                          onChange={(e) =>
+                            setMemoryChipDraft((d) => ({
+                              ...d,
+                              [field]: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitMemoryChip(field);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="world-row">
+                    <span className="world-row-label">Mood</span>
+                    <input
+                      type="text"
+                      className="world-mood-input"
+                      value={memoryMoodDraft}
+                      placeholder="e.g. rainy noir"
+                      aria-label="Mood"
+                      onChange={(e) => setMemoryMoodDraft(e.target.value)}
+                      onBlur={(e) => onMoodCommit(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          onMoodCommit((e.target as HTMLInputElement).value);
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
                 <label className="sr-only" htmlFor="story-transcript">
                   Story transcript
                 </label>

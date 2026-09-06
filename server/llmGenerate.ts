@@ -122,10 +122,20 @@ Hard requirements:
 
 export type GenerateMode = "forge" | "story";
 
+/** Compact world bible passed from StoryForge UI */
+export interface WorldMemoryInput {
+  characters?: string[];
+  setting?: string[];
+  props?: string[];
+  mood?: string;
+}
+
 export interface GenerateOptions {
   /** Previous scene HTML so StoryForge can evolve instead of restarting */
   priorHtml?: string;
   mode?: GenerateMode;
+  /** Living cast / places / props / mood for continuity */
+  worldMemory?: WorldMemoryInput;
 }
 
 export const STORY_SYSTEM_PROMPT = `You are StoryForge inside AppForge — a live story→world engine.
@@ -139,7 +149,8 @@ Hard requirements:
 5. All CSS/JS inline (or in <style>/<script>). Google Fonts CSS OK. NO external JS CDNs.
 6. Include a sensible <title> reflecting the story world.
 7. No external network calls for core function (except optional Google Fonts).
-8. If prior HTML is provided, EVOLVE that scene: keep working interactions and visual identity, then add/adapt for new beats. Do not throw away the world and restart from a blank template unless the story clearly demands a total scene change.`;
+8. If prior HTML is provided, EVOLVE that scene: keep working interactions and visual identity, then add/adapt for new beats. Do not throw away the world and restart from a blank template unless the story clearly demands a total scene change.
+9. If a WORLD BIBLE is provided, honor it: keep named characters, places, props, and mood consistent across beats. Do not rename or drop established cast/props without story cause.`;
 
 function stripFences(text: string): string {
   let s = text.trim();
@@ -167,6 +178,21 @@ function extractTitle(html: string, fallback: string): string {
   return t.length > 60 ? t.slice(0, 57) + "…" : t;
 }
 
+function formatWorldMemoryBlock(wm?: WorldMemoryInput): string {
+  if (!wm) return "";
+  const chars = (wm.characters || []).map((s) => s.trim()).filter(Boolean);
+  const setting = (wm.setting || []).map((s) => s.trim()).filter(Boolean);
+  const props = (wm.props || []).map((s) => s.trim()).filter(Boolean);
+  const mood = (wm.mood || "").trim();
+  if (!chars.length && !setting.length && !props.length && !mood) return "";
+  const lines = ["WORLD BIBLE (honor these; keep continuity):"];
+  if (chars.length) lines.push(`- Characters: ${chars.join(", ")}`);
+  if (setting.length) lines.push(`- Setting: ${setting.join(", ")}`);
+  if (props.length) lines.push(`- Props: ${props.join(", ")}`);
+  if (mood) lines.push(`- Mood / tone: ${mood}`);
+  return `\n\n${lines.join("\n")}\n`;
+}
+
 function buildUserPrompt(
   prompt: string,
   options?: GenerateOptions,
@@ -176,11 +202,12 @@ function buildUserPrompt(
   const prior = (options?.priorHtml || "").trim();
 
   if (mode === "story") {
+    const bible = formatWorldMemoryBlock(options?.worldMemory);
     const priorBlock =
       prior.length > 0
         ? `\n\nPRIOR SCENE HTML (evolve this — keep live click→state interactions; extend for new beats):\n\`\`\`html\n${prior.slice(0, 120_000)}\n\`\`\`\n`
         : "\n\nNo prior scene yet — create the first interactive world from the story so far.\n";
-    return `Story so far (all beats):\n\n${story}${priorBlock}\nEmit one complete interactive HTML scene for this story. Every meaningful prop/character cue should be clickable or stateful.`;
+    return `Story so far (all beats):\n\n${story}${bible}${priorBlock}\nEmit one complete interactive HTML scene for this story. Every meaningful prop/character cue should be clickable or stateful. Honor the world bible.`;
   }
 
   return `Build this as one perfect self-contained HTML app:\n\n${story}`;

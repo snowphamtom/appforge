@@ -808,6 +808,123 @@
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+
+/* —— World bible (StoryForge memory) —— */
+.world-bible {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.world-bible-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+}
+
+.world-bible-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.world-bible-meta {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.world-bible-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.world-row {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+
+.world-row-label {
+  flex: 0 0 4.6rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 0.35rem;
+}
+
+.world-chips {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.world-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.55rem;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.world-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.world-chip span[aria-hidden] {
+  opacity: 0.55;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.world-chip-input,
+.world-mood-input {
+  flex: 1;
+  min-width: 7rem;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.65rem;
+  outline: none;
+}
+
+.world-mood-input {
+  border-radius: 10px;
+  border-style: solid;
+}
+
+.world-chip-input:focus,
+.world-mood-input:focus {
+  border-color: var(--accent);
+  border-style: solid;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
 .story-tools {
   display: flex;
   flex-wrap: wrap;

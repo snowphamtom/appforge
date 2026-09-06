@@ -2,6 +2,7 @@
  * Offline StoryForge fallback — interactive scene from story beats when LLM is unavailable.
  */
 import type { GenerateResult } from './generator';
+import { isWorldMemoryEmpty, type WorldMemory } from './worldMemory';
 
 function escapeHtml(s: string): string {
   return s
@@ -11,7 +12,10 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function generateStoryScene(story: string): GenerateResult {
+export function generateStoryScene(
+  story: string,
+  worldMemory?: WorldMemory,
+): GenerateResult {
   const trimmed = story.trim() || 'An empty stage waits for the first beat.';
   const beats = trimmed
     .split(/\n+/)
@@ -23,6 +27,23 @@ export function generateStoryScene(story: string): GenerateResult {
       : '';
   const title = rawTitle || 'StoryForge Scene';
   const safeTitle = escapeHtml(title);
+  const wm = worldMemory;
+  const moodLabel = escapeHtml(
+    (wm?.mood || '').trim() || 'quiet',
+  );
+  const bibleBits: string[] = [];
+  if (wm && !isWorldMemoryEmpty(wm)) {
+    if (wm.characters.length)
+      bibleBits.push(`<span class="bible-chip"><em>cast</em> ${escapeHtml(wm.characters.join(', '))}</span>`);
+    if (wm.setting.length)
+      bibleBits.push(`<span class="bible-chip"><em>place</em> ${escapeHtml(wm.setting.join(', '))}</span>`);
+    if (wm.props.length)
+      bibleBits.push(`<span class="bible-chip"><em>props</em> ${escapeHtml(wm.props.join(', '))}</span>`);
+  }
+  const bibleHtml = bibleBits.length
+    ? `<div class="bible" aria-label="World bible">${bibleBits.join('')}</div>`
+    : '';
+  const moodJs = JSON.stringify((wm?.mood || '').trim() || 'quiet');
   const beatButtons = beats
     .map((b, i) => {
       const label = escapeHtml(b.length > 72 ? `${b.slice(0, 69)}…` : b);
@@ -72,6 +93,9 @@ h1 { font-size:clamp(1.4rem,4vw,2rem); letter-spacing:-.03em; margin:0 0 .4rem; 
   padding:.5rem .85rem; font-weight:600; cursor:pointer; font:inherit; }
 .btn-accent { background:var(--accent); color:#042f2e; border-color:transparent; }
 .empty { color:var(--muted); }
+.bible { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.75rem; }
+.bible-chip { font-size:.72rem; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:.15rem .55rem; }
+.bible-chip em { font-style:normal; color:var(--accent); font-weight:600; margin-right:.25rem; text-transform:uppercase; letter-spacing:.04em; font-size:.65rem; }
 </style>
 </head>
 <body>
@@ -82,7 +106,8 @@ h1 { font-size:clamp(1.4rem,4vw,2rem); letter-spacing:-.03em; margin:0 0 .4rem; 
   <section class="stage" aria-label="Live stage">
     <div id="stage-focus" class="focus" role="status">Click a beat to bring it into focus.</div>
     <div class="meter" aria-hidden="true"><div id="stage-fill" class="fill"></div></div>
-    <p class="meta"><span id="stage-count">0</span> / ${beats.length || 1} beats lit · <span id="stage-mood">quiet</span></p>
+    <p class="meta"><span id="stage-count">0</span> / ${beats.length || 1} beats lit · <span id="stage-mood">${moodLabel}</span></p>
+    ${bibleHtml}
   </section>
   <section class="props" aria-label="Story beats">
     ${beatButtons || '<p class="empty">Start typing your story…</p>'}
@@ -100,7 +125,7 @@ h1 { font-size:clamp(1.4rem,4vw,2rem); letter-spacing:-.03em; margin:0 0 .4rem; 
   var countEl = document.getElementById('stage-count');
   var mood = document.getElementById('stage-mood');
   var total = ${beats.length || 1};
-  var moods = ['quiet','curious','tense','bright','alive'];
+  var moods = [${moodJs},'curious','tense','bright','alive'];
   function sync(){
     var n = Object.keys(lit).length;
     countEl.textContent = String(n);

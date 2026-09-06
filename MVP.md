@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** StoryForge world memory (bible) — 2026-09-06 ~5:05 PM CT  
+Living cast/setting/props/mood panel; heuristic extract + manual chips; passed into stream/one-shot/offline prompts; session + localStorage draft persistence.
+
 **Note:** StoryForge live HTML stream — 2026-09-06 ~5:00 PM CT  
 SSE `/api/generate/stream` yields token deltas; StoryForge updates iframe `srcDoc` on HTML checkpoints; abort on new beat; non-stream `/api/generate` + offline `storyScene` remain fallbacks.
 
