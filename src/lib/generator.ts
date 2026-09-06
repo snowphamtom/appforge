@@ -5,10 +5,15 @@
 
 export type TemplateKind = 'todo' | 'tipjar' | 'landing' | 'habit' | 'dashboard';
 
+/** Template kinds plus LLM-forged apps from /api/generate */
+export type ResultKind = TemplateKind | 'llm';
+
 export interface GenerateResult {
   html: string;
-  kind: TemplateKind;
+  kind: ResultKind;
   title: string;
+  /** Present when kind === 'llm' */
+  model?: string;
 }
 
 function escapeHtml(s: string): string {

@@ -1,45 +1,47 @@
 # AppForge MVP — scope
 
 **Date:** 2026-09-06  
-**Goal:** Working prompt → generate → live iframe remix loop, with All Gas stack stubs (Convex + Firecrawl + AgentMail).
+**Goal:** Prompt → LLM-forged (or template) self-contained HTML → live iframe remix loop. All Gas stubs (Convex + Firecrawl + AgentMail) unchanged.
 
 ## Iterated studio
 
-**Note:** Iterated studio (local polish) — 2026-09-06 3:45 PM CT  
-Mobile studio stacks Source above Live; Open preview (blob URL) in topbar + Live pane; waitlist example chip; post-build template status line; secondary-button disabled styles. Prior: Prompt/Source/Live labels, ⌘/Ctrl+Enter, empty-state, recent projects, template bump. Vite `base` `/` local; `build:pages` → `/appforge/`. Convex stubs only.
+**Note:** LLM generate wiring — 2026-09-06 ~3:45 PM CT  
+`POST /api/generate` via Vite middleware (xAI / OpenAI); async Build + “Forging your world…”; fallback toast for no key / Pages. Prior: mobile studio stack, Open preview, waitlist chip, template status, Pages base `/appforge/`.
 
-## In scope (v0)
+## In scope (v0 / v0.1)
 
 - Vite + React + TypeScript SPA at `/workspace/appforge`
 - Home: prompt textarea, Build, example chips, keyboard Build hint
-- Local generator (no LLM API): todo / tipjar / landing / habit / dashboard
+- **LLM generation** (local dev): `XAI_API_KEY` or `OPENAI_API_KEY` → one perfect HTML app; `kind: 'llm'`
+- Local generator fallback: todo / tipjar / landing / habit / dashboard
 - Studio: editable HTML (Source) + sandboxed iframe (Live), debounced preview, empty-state
 - Regenerate, New prompt, Download `.html`, Copy HTML
 - Recent projects list (localStorage, last 5) on home
 - URL seed UI (Firecrawl stub)
 - Local project persistence (`localStorage`)
 - `convex/` stubs: schema, projects CRUD, Firecrawl action, AgentMail HTTP ingress
-- README + this MVP.md
-- `npm run build` succeeds; `npm run build:pages` for GH Pages base; `npm run dev` serves UI
+- README + this MVP.md + `.env.example`
+- `npm run build` succeeds (static Pages = templates only); `npm run build:pages`; `npm run dev` serves UI + API
 
 ## Out of scope (v0)
 
-- Live Convex deployment / auth (leave stubs if auth wall)
+- Live Convex deployment / auth (leave stubs if auth wall) — **do not attach to quirky-rhinoceros-204**
 - Real Firecrawl scrapes without API key
 - Live AgentMail mailbox
 - Multi-user accounts / billing
-- External LLM generation
+- LLM backend on GitHub Pages (static host cannot call LLM without a separate backend)
 - Prize / sweepstakes / phone-claim flows (explicitly excluded)
 - Touching `/workspace/ceilinggate` or its CSS
 
 ## Success criteria
 
 1. `npm install && npm run dev` shows AppForge UI  
-2. Example chip → interactive preview in iframe  
-3. Edit source → preview updates  
-4. Download / copy work  
-5. Clear path documented for Convex plug-in  
+2. With API key: prompt → LLM HTML in studio; without: templates + toast  
+3. Example chip → interactive preview in iframe  
+4. Edit source → preview updates  
+5. Download / copy work  
+6. Clear path documented for Convex plug-in and LLM keys  
 
 ## Fences
 
-- OFF PHONE · Fee ≠ prize · no fake prize $ · silent to Taylor
+- OFF PHONE · Fee ≠ prize · no fake prize $ · silent to Taylor · no ceilinggate · no Convex attach to quirky-rhinoceros-204

@@ -3,13 +3,13 @@
  * When Convex is wired, swap these for mutations/queries in convex/projects.ts.
  */
 
-import type { TemplateKind } from './generator';
+import type { ResultKind } from './generator';
 
 export interface ProjectRecord {
   id: string;
   prompt: string;
   title: string;
-  kind: TemplateKind;
+  kind: ResultKind;
   html: string;
   createdAt: number;
   updatedAt: number;
@@ -34,7 +34,7 @@ function writeAll(items: ProjectRecord[]) {
 export function saveGenerationLocal(input: {
   prompt: string;
   title: string;
-  kind: TemplateKind;
+  kind: ResultKind;
   html: string;
 }): ProjectRecord {
   const now = Date.now();

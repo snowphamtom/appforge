@@ -18,7 +18,41 @@ const TEMPLATE_LABELS: Record<string, string> = {
   landing: 'Landing / waitlist',
   habit: 'Habit tracker',
   dashboard: 'Dashboard',
+  llm: 'LLM forged',
 };
+
+async function tryLlmGenerate(prompt: string): Promise<GenerateResult> {
+  const res = await fetch('/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) {
+    let code = '';
+    try {
+      const err = (await res.json()) as { code?: string; error?: string };
+      code = err.code || err.error || '';
+    } catch {
+      /* ignore */
+    }
+    throw new Error(code || `HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as {
+    html?: string;
+    title?: string;
+    kind?: string;
+    model?: string;
+  };
+  if (!data.html || typeof data.html !== 'string') {
+    throw new Error('Invalid LLM response');
+  }
+  return {
+    html: data.html,
+    title: data.title || 'Untitled App',
+    kind: 'llm',
+    model: data.model,
+  };
+}
 
 function downloadHtml(html: string, title: string) {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -54,7 +88,9 @@ export default function App() {
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [recent, setRecent] = useState<ProjectRecord[]>([]);
   const [seeding, setSeeding] = useState(false);
+  const [forging, setForging] = useState(false);
   const debounceRef = useRef<number | null>(null);
+  const forgeAbortRef = useRef(0);
   const previewBlobRef = useRef<string | null>(null);
 
   const refreshRecent = useCallback(() => {
@@ -84,26 +120,46 @@ export default function App() {
   );
 
   const runGenerate = useCallback(
-    (p: string) => {
+    async (p: string) => {
       const trimmed = p.trim();
       if (!trimmed) return;
-      const gen = generateApp(trimmed);
-      const rec = saveGenerationLocal({
-        prompt: trimmed,
-        title: gen.title,
-        kind: gen.kind,
-        html: gen.html,
-      });
-      openStudio(gen, rec, trimmed);
+      const ticket = ++forgeAbortRef.current;
+      setForging(true);
+      let gen: GenerateResult;
+      let usedFallback = false;
+      try {
+        try {
+          gen = await tryLlmGenerate(trimmed);
+        } catch {
+          if (ticket !== forgeAbortRef.current) return;
+          gen = generateApp(trimmed);
+          usedFallback = true;
+        }
+        if (ticket !== forgeAbortRef.current) return;
+        const rec = saveGenerationLocal({
+          prompt: trimmed,
+          title: gen.title,
+          kind: gen.kind,
+          html: gen.html,
+        });
+        openStudio(gen, rec, trimmed);
+        if (usedFallback) {
+          showToast('Using local templates (add API key for LLM)');
+        }
+      } finally {
+        if (ticket === forgeAbortRef.current) setForging(false);
+      }
     },
-    [openStudio],
+    [openStudio, showToast],
   );
 
-  const onBuild = () => runGenerate(prompt);
+  const onBuild = () => {
+    void runGenerate(prompt);
+  };
 
   const onChip = (examplePrompt: string) => {
     setPrompt(examplePrompt);
-    runGenerate(examplePrompt);
+    void runGenerate(examplePrompt);
   };
 
   const onReopen = (rec: ProjectRecord) => {
@@ -134,9 +190,11 @@ export default function App() {
   }, []);
 
   const onRegenerate = () => {
-    if (!prompt.trim()) return;
-    runGenerate(prompt);
-    showToast('Regenerated');
+    if (!prompt.trim() || forging) return;
+    void (async () => {
+      await runGenerate(prompt);
+      showToast('Regenerated');
+    })();
   };
 
   const onNewPrompt = () => {
@@ -216,8 +274,13 @@ export default function App() {
         </button>
         {view === 'studio' && (
           <div className="topbar-actions">
-            <button type="button" className="btn btn-secondary" onClick={onRegenerate}>
-              Regenerate
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onRegenerate}
+              disabled={forging}
+            >
+              {forging ? 'Forging…' : 'Regenerate'}
             </button>
             <button type="button" className="btn btn-secondary" onClick={onNewPrompt}>
               New prompt
@@ -266,9 +329,10 @@ export default function App() {
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                     e.preventDefault();
-                    onBuild();
+                    if (!forging) onBuild();
                   }
                 }}
+                disabled={forging}
               />
               <div className="prompt-footer">
                 <div className="chips" role="group" aria-label="Example prompts">
@@ -278,6 +342,7 @@ export default function App() {
                       type="button"
                       className="chip"
                       onClick={() => onChip(ex.prompt)}
+                      disabled={forging}
                     >
                       {ex.label}
                     </button>
@@ -294,9 +359,10 @@ export default function App() {
                     type="button"
                     className="btn btn-primary"
                     onClick={onBuild}
-                    disabled={!prompt.trim()}
+                    disabled={!prompt.trim() || forging}
+                    aria-busy={forging}
                   >
-                    Build
+                    {forging ? 'Forging…' : 'Build'}
                   </button>
                 </div>
               </div>
@@ -348,17 +414,29 @@ export default function App() {
               </section>
             )}
 
+            {forging && (
+              <p className="forging-status" role="status" aria-live="polite">
+                Forging your world…
+              </p>
+            )}
+
             <p className="hint">
-              Local generator · no API key · {modKey}+Enter to Build
+              LLM when API key set · local templates fallback · {modKey}+Enter to Build
               {project ? ` · last project ${project.id.slice(0, 8)}` : ''}
             </p>
           </section>
         ) : (
           <section className="studio" aria-label="Remix studio">
             <div className="studio-status" role="status">
-              <span className="studio-status-label">Template</span>
+              <span className="studio-status-label">
+                {result?.kind === 'llm' ? 'Source' : 'Template'}
+              </span>
               <span className="studio-status-value">
-                {result ? (TEMPLATE_LABELS[result.kind] ?? result.kind) : '—'}
+                {result
+                  ? result.kind === 'llm'
+                    ? `LLM${result.model ? ` · ${result.model}` : ''}`
+                    : (TEMPLATE_LABELS[result.kind] ?? result.kind)
+                  : '—'}
               </span>
               <span className="studio-status-sep" aria-hidden>
                 ·
