@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** StoryForge first-run onboard — 2026-09-06 ~5:15 PM CT  
+Onboarding strip + empty-state 3 steps (type/speak → stream → click props); 3 mood demo presets (rainy alley / cozy attic / orbit garden); dismissible collapsible What's new chip (stream/mic/bible/export/scrub/click) via localStorage. No Convex / paid APIs.
+
 **Note:** StoryForge post-commit interactivity — 2026-09-06 ~5:15 PM CT  
 After streamed/LLM scene `done`, `injectInteractiveScene(html)` wraps the document with delegated click→state (props/characters/buttons/images → highlight, inventory toast, open/close). Mid-stream partials untouched; offline `storyScene` unchanged. Timeline scrub re-applies inject.
 

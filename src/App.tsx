@@ -25,6 +25,11 @@ import {
   slugFilename,
 } from './lib/storyExport';
 import {
+  STORY_PRESETS,
+  presetTranscript,
+  type StoryPreset,
+} from './lib/storyPresets';
+import {
   createSpeechRecognition,
   isSpeechSupported,
   transcriptsFromEvent,
@@ -130,11 +135,23 @@ function formatWhen(ts: number): string {
   }
 }
 
-const STORY_EXAMPLES = [
-  'A lantern flickers in a rainy alley. A cat watches from a fire escape.',
-  'She finds a brass key stamped with a moon. The door it opens is only painted on the wall.',
-  'Click the lantern — the alley brightens and a hidden mural appears.',
+const WHATS_NEW_KEY = 'appforge.storyforge.whatsnew.v1.dismissed';
+const WHATS_NEW_ITEMS = [
+  { id: 'stream', label: 'stream', tip: 'Scenes stream token-by-token into the live pane' },
+  { id: 'mic', label: 'mic', tip: 'Dictate beats with free Web Speech' },
+  { id: 'bible', label: 'bible', tip: 'World bible keeps cast / setting / props / mood' },
+  { id: 'export', label: 'export', tip: 'Export scene, transcript, or a ZIP pack' },
+  { id: 'scrub', label: 'scrub', tip: 'Click beats to scrub timeline snapshots' },
+  { id: 'click', label: 'click', tip: 'Click props in the finished scene to change state' },
 ] as const;
+
+function readWhatsNewDismissed(): boolean {
+  try {
+    return localStorage.getItem(WHATS_NEW_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 export default function App() {
   const [view, setView] = useState<View>('home');
@@ -176,6 +193,8 @@ export default function App() {
   const [scrubBeatIndex, setScrubBeatIndex] = useState<number | null>(null);
   /** Beat indices that currently have session HTML snapshots (timeline dots). */
   const [beatSnapKeys, setBeatSnapKeys] = useState<number[]>([]);
+  const [whatsNewDismissed, setWhatsNewDismissed] = useState(readWhatsNewDismissed);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
 
   const debounceRef = useRef<number | null>(null);
   const storyDebounceRef = useRef<number | null>(null);
@@ -863,19 +882,24 @@ export default function App() {
     showToast('World bible cleared');
   };
 
-  const loadStoryExample = () => {
+  const dismissWhatsNew = () => {
+    setWhatsNewDismissed(true);
+    setWhatsNewOpen(false);
+    try {
+      localStorage.setItem(WHATS_NEW_KEY, '1');
+    } catch {
+      /* ignore quota / private mode */
+    }
+  };
+
+  const loadStoryPreset = (preset: StoryPreset) => {
     stopSpeech();
-    const demo = STORY_EXAMPLES.join('\n\n');
+    const demo = presetTranscript(preset);
     setStoryText(demo);
     storyTextRef.current = demo;
     setStoryDraft('');
     storyDraftRef.current = '';
-    setStoryBeats(
-      demo
-        .split(/\n+/)
-        .map((b) => b.trim())
-        .filter(Boolean),
-    );
+    setStoryBeats([...preset.beats]);
     // Fresh world for demo magic — do not evolve prior HTML
     setStoryHtml('');
     storyHtmlRef.current = '';
@@ -884,11 +908,15 @@ export default function App() {
     setBeatSnapKeys([]);
     setScrubBeatIndex(null);
     const fresh = extractWorldMemory(demo);
+    // Prefer preset mood label when extract is empty/weak
+    if (!fresh.mood.trim() && preset.mood) {
+      fresh.mood = preset.mood;
+    }
     setWorldMemory(fresh);
     worldMemoryRef.current = fresh;
     setMemoryMoodDraft(fresh.mood || '');
     setMemoryChipDraft({ characters: '', setting: '', props: '' });
-    setStoryTitle('StoryForge');
+    setStoryTitle(preset.label);
     setStoryUsedFallback(false);
     setStoryModel(undefined);
     if (storyDebounceRef.current) {
@@ -896,7 +924,7 @@ export default function App() {
       storyDebounceRef.current = null;
     }
     setStoryQueued(false);
-    showToast('Demo story loaded — forging the scene…');
+    showToast(`${preset.label} loaded — forging the scene…`);
     void runStoryGenerate(demo);
   };
 
@@ -1173,6 +1201,58 @@ export default function App() {
                 <span className="pane-meta">{storyBeats.length} beats</span>
               </div>
               <div className="story-body">
+                {!whatsNewDismissed && (
+                  <div className="whats-new" aria-label="What's new in StoryForge">
+                    <button
+                      type="button"
+                      className="whats-new-chip"
+                      aria-expanded={whatsNewOpen}
+                      onClick={() => setWhatsNewOpen((o) => !o)}
+                    >
+                      <span className="whats-new-label">What&apos;s new</span>
+                      <span className="whats-new-caret" aria-hidden>
+                        {whatsNewOpen ? '▾' : '▸'}
+                      </span>
+                    </button>
+                    {whatsNewOpen && (
+                      <ul className="whats-new-list">
+                        {WHATS_NEW_ITEMS.map((item) => (
+                          <li key={item.id} title={item.tip}>
+                            <span className="whats-new-item-label">{item.label}</span>
+                            <span className="whats-new-item-tip">{item.tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <button
+                      type="button"
+                      className="whats-new-dismiss"
+                      onClick={dismissWhatsNew}
+                      title="Dismiss What's new"
+                      aria-label="Dismiss What's new"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                <div className="story-onboard" aria-label="How StoryForge works">
+                  <ol className="story-onboard-steps">
+                    <li>
+                      <span className="story-onboard-n">1</span>
+                      <span className="story-onboard-t">Type or speak a beat</span>
+                    </li>
+                    <li>
+                      <span className="story-onboard-n">2</span>
+                      <span className="story-onboard-t">Scene streams live</span>
+                    </li>
+                    <li>
+                      <span className="story-onboard-n">3</span>
+                      <span className="story-onboard-t">Click props to play</span>
+                    </li>
+                  </ol>
+                </div>
+
                 <p className="story-intro">
                   Tell a story. The live preview streams in as the model writes HTML — clicks in the
                   scene should change state, not sit as costume stubs.
@@ -1373,10 +1453,24 @@ export default function App() {
                     free Web Speech).
                   </p>
                 )}
+                <div className="story-presets" aria-label="Demo story presets">
+                  <span className="story-presets-label">Try a mood</span>
+                  <div className="story-preset-chips">
+                    {STORY_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className="story-preset-chip"
+                        onClick={() => loadStoryPreset(preset)}
+                        title={`${preset.mood} — ${preset.blurb}`}
+                      >
+                        <span className="story-preset-name">{preset.label}</span>
+                        <span className="story-preset-mood">{preset.mood}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="story-tools">
-                  <button type="button" className="btn btn-secondary" onClick={loadStoryExample}>
-                    Load demo story
-                  </button>
                   <span className="kbd-hint">
                     <kbd>Enter</kbd>
                     <span className="kbd-hint-text">
@@ -1463,9 +1557,23 @@ export default function App() {
                 <div className="empty-state empty-state-live" role="status">
                   <p className="empty-title">Scene waits for a story</p>
                   <p className="empty-body">
-                    Type on the left (or load the demo). When you pause or commit a beat, the
-                    interactive world appears here.
+                    Type or speak on the left — or pick a mood preset. After a pause or beat commit,
+                    the scene streams here; when it finishes, click props to play.
                   </p>
+                  <ol className="story-onboard-steps story-onboard-steps-empty">
+                    <li>
+                      <span className="story-onboard-n">1</span>
+                      <span className="story-onboard-t">Type / speak</span>
+                    </li>
+                    <li>
+                      <span className="story-onboard-n">2</span>
+                      <span className="story-onboard-t">Scene streams</span>
+                    </li>
+                    <li>
+                      <span className="story-onboard-n">3</span>
+                      <span className="story-onboard-t">Click props</span>
+                    </li>
+                  </ol>
                 </div>
               )}
             </div>
