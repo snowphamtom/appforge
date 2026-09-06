@@ -74,7 +74,7 @@ export function resolveLlmConfig(env: Record<string, string>): LlmConfig | null 
     return {
       apiKey: openrouter,
       baseUrl: "https://openrouter.ai/api/v1",
-      model: (env.OPENROUTER_MODEL || "").trim() || "openrouter/auto",
+      model: (env.OPENROUTER_MODEL || "").trim() || "openrouter/free",
       provider: "openrouter",
     };
   }
