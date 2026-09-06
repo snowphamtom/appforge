@@ -16,7 +16,7 @@ export type TemplateKind =
   | 'invoice';
 
 /** Template kinds plus LLM-forged apps and multi-section suites */
-export type ResultKind = TemplateKind | 'llm' | 'suite';
+export type ResultKind = TemplateKind | 'llm' | 'suite' | 'story';
 
 export interface GenerateResult {
   html: string;

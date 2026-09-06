@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** StoryForge mode — 2026-09-06 ~4:55 PM CT  
+Verbal→visual story stream: `mode: "story"` + `priorHtml` on `/api/generate`; live iframe; debounce + beat commit; offline `storyScene` fallback. One-shot forge unchanged.
+
 **Note:** Free-tier LLM + template leap — 2026-09-06 ~4:40 PM CT  
 Providers: XAI→GEMINI→GROQ→OPENROUTER→OLLAMA→OPENAI; local Ollama `llama3.2:1b`; expanded templates (ledger/countdown/kanban/quiz/invoice + multi-section suites).
 

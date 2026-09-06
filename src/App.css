@@ -634,3 +634,235 @@
   line-height: 1.5;
   margin: 0 0 0.5rem;
 }
+
+/* —— Mode tabs —— */
+.mode-tabs {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+.mode-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode-tab:hover {
+  color: var(--text);
+}
+
+.mode-tab-active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.text-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* —— StoryForge —— */
+.storyforge {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "status status"
+    "story live";
+  min-height: 0;
+  height: calc(100vh - 57px);
+}
+
+.storyforge .studio-status {
+  grid-area: status;
+}
+
+.pane-story {
+  grid-area: story;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+
+.storyforge .pane-live {
+  grid-area: live;
+}
+
+.story-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem 1.1rem;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.story-intro {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.story-transcript {
+  width: 100%;
+  min-height: 140px;
+  flex: 0 0 auto;
+  resize: vertical;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  padding: 0.75rem 0.85rem;
+  outline: none;
+}
+
+.story-transcript:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.story-beats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 28vh;
+  overflow: auto;
+}
+
+.story-beats li {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.beat-n {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.75rem;
+  min-width: 1.1rem;
+}
+
+.beat-t {
+  flex: 1;
+  color: var(--text);
+}
+
+.story-compose {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.story-draft {
+  flex: 1;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  outline: none;
+}
+
+.story-draft:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.story-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.scene-updating {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.scene-updating::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  border-right-color: transparent;
+  animation: af-spin 0.7s linear infinite;
+}
+
+@media (max-width: 900px) {
+  .storyforge {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(280px, 1fr);
+    grid-template-areas:
+      "status"
+      "story"
+      "live";
+    height: auto;
+    min-height: calc(100vh - 57px);
+  }
+
+  .pane-story {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 50vh;
+  }
+
+  .mode-tabs {
+    margin-left: 0;
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+}

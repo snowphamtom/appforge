@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { EXAMPLE_PROMPTS, generateApp, type GenerateResult } from './lib/generator';
+import { generateStoryScene } from './lib/storyScene';
 import {
   listRecentProjects,
   saveGenerationLocal,
@@ -8,9 +9,10 @@ import {
 } from './lib/projects';
 import { seedFromUrl } from './integrations/firecrawl';
 
-type View = 'home' | 'studio';
+type View = 'home' | 'studio' | 'story';
 
 const DEBOUNCE_MS = 350;
+const STORY_DEBOUNCE_MS = 1500;
 
 const TEMPLATE_LABELS: Record<string, string> = {
   todo: 'Todo list',
@@ -25,13 +27,28 @@ const TEMPLATE_LABELS: Record<string, string> = {
   invoice: 'Invoice stub',
   suite: 'Multi-section',
   llm: 'LLM forged',
+  story: 'StoryForge scene',
 };
 
-async function tryLlmGenerate(prompt: string): Promise<GenerateResult> {
+type LlmGenerateOpts = {
+  priorHtml?: string;
+  mode?: 'forge' | 'story';
+  signal?: AbortSignal;
+};
+
+async function tryLlmGenerate(
+  prompt: string,
+  opts: LlmGenerateOpts = {},
+): Promise<GenerateResult> {
   const res = await fetch('/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({
+      prompt,
+      priorHtml: opts.priorHtml,
+      mode: opts.mode ?? 'forge',
+    }),
+    signal: opts.signal,
   });
   if (!res.ok) {
     let code = '';
@@ -83,6 +100,12 @@ function formatWhen(ts: number): string {
   }
 }
 
+const STORY_EXAMPLES = [
+  'A lantern flickers in a rainy alley. A cat watches from a fire escape.',
+  'She finds a brass key stamped with a moon. The door it opens is only painted on the wall.',
+  'Click the lantern — the alley brightens and a hidden mural appears.',
+] as const;
+
 export default function App() {
   const [view, setView] = useState<View>('home');
   const [prompt, setPrompt] = useState('');
@@ -95,8 +118,23 @@ export default function App() {
   const [recent, setRecent] = useState<ProjectRecord[]>([]);
   const [seeding, setSeeding] = useState(false);
   const [forging, setForging] = useState(false);
+
+  // StoryForge state
+  const [storyText, setStoryText] = useState('');
+  const [storyBeats, setStoryBeats] = useState<string[]>([]);
+  const [storyDraft, setStoryDraft] = useState('');
+  const [storyHtml, setStoryHtml] = useState('');
+  const [storyTitle, setStoryTitle] = useState('StoryForge');
+  const [storyUpdating, setStoryUpdating] = useState(false);
+  const [storyUsedFallback, setStoryUsedFallback] = useState(false);
+  const [storyModel, setStoryModel] = useState<string | undefined>();
+
   const debounceRef = useRef<number | null>(null);
+  const storyDebounceRef = useRef<number | null>(null);
   const forgeAbortRef = useRef(0);
+  const storyTicketRef = useRef(0);
+  const storyAbortRef = useRef<AbortController | null>(null);
+  const storyHtmlRef = useRef('');
   const previewBlobRef = useRef<string | null>(null);
 
   const refreshRecent = useCallback(() => {
@@ -106,6 +144,10 @@ export default function App() {
   useEffect(() => {
     refreshRecent();
   }, [refreshRecent]);
+
+  useEffect(() => {
+    storyHtmlRef.current = storyHtml;
+  }, [storyHtml]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -159,6 +201,97 @@ export default function App() {
     [openStudio, showToast],
   );
 
+  const runStoryGenerate = useCallback(
+    async (fullStory: string) => {
+      const trimmed = fullStory.trim();
+      if (!trimmed) return;
+
+      storyAbortRef.current?.abort();
+      const ac = new AbortController();
+      storyAbortRef.current = ac;
+      const ticket = ++storyTicketRef.current;
+      setStoryUpdating(true);
+
+      const prior = storyHtmlRef.current.trim() || undefined;
+      let gen: GenerateResult;
+      let usedFallback = false;
+
+      try {
+        try {
+          gen = await tryLlmGenerate(trimmed, {
+            mode: 'story',
+            priorHtml: prior,
+            signal: ac.signal,
+          });
+        } catch {
+          if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
+          gen = generateStoryScene(trimmed);
+          usedFallback = true;
+        }
+        if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
+
+        setStoryHtml(gen.html);
+        setStoryTitle(gen.title);
+        setStoryModel(gen.model);
+        setStoryUsedFallback(usedFallback);
+        storyHtmlRef.current = gen.html;
+
+        saveGenerationLocal({
+          prompt: trimmed,
+          title: gen.title,
+          kind: gen.kind,
+          html: gen.html,
+        });
+        refreshRecent();
+        if (usedFallback) {
+          showToast('Using offline StoryForge scene (add API key for LLM)');
+        }
+      } finally {
+        if (ticket === storyTicketRef.current) setStoryUpdating(false);
+      }
+    },
+    [refreshRecent, showToast],
+  );
+
+  const scheduleStoryGenerate = useCallback(
+    (fullStory: string) => {
+      if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
+      storyDebounceRef.current = window.setTimeout(() => {
+        void runStoryGenerate(fullStory);
+      }, STORY_DEBOUNCE_MS);
+    },
+    [runStoryGenerate],
+  );
+
+  const openStoryForge = () => {
+    setView('story');
+  };
+
+  const onStoryTextChange = (value: string) => {
+    setStoryText(value);
+    const beats = value
+      .split(/\n+/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    setStoryBeats(beats);
+    if (value.trim()) scheduleStoryGenerate(value);
+  };
+
+  const commitBeat = () => {
+    const draft = storyDraft.trim();
+    if (!draft) return;
+    const next = storyText.trim() ? `${storyText.trim()}\n\n${draft}` : draft;
+    setStoryText(next);
+    setStoryDraft('');
+    const beats = next
+      .split(/\n+/)
+      .map((b) => b.trim())
+      .filter(Boolean);
+    setStoryBeats(beats);
+    if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
+    void runStoryGenerate(next);
+  };
+
   const onBuild = () => {
     void runGenerate(prompt);
   };
@@ -169,6 +302,21 @@ export default function App() {
   };
 
   const onReopen = (rec: ProjectRecord) => {
+    if (rec.kind === 'story' || rec.prompt.split('\n').length > 1) {
+      setStoryText(rec.prompt);
+      setStoryBeats(
+        rec.prompt
+          .split(/\n+/)
+          .map((b) => b.trim())
+          .filter(Boolean),
+      );
+      setStoryHtml(rec.html);
+      setStoryTitle(rec.title);
+      storyHtmlRef.current = rec.html;
+      setView('story');
+      showToast('Reopened StoryForge scene');
+      return;
+    }
     openStudio(
       { html: rec.html, kind: rec.kind, title: rec.title },
       rec,
@@ -188,6 +336,8 @@ export default function App() {
   useEffect(() => {
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
+      storyAbortRef.current?.abort();
       if (previewBlobRef.current) {
         URL.revokeObjectURL(previewBlobRef.current);
         previewBlobRef.current = null;
@@ -213,15 +363,18 @@ export default function App() {
   };
 
   const onDownload = () => {
-    if (!source) return;
-    downloadHtml(source, result?.title ?? 'appforge');
+    const html = view === 'story' ? storyHtml : source;
+    const title = view === 'story' ? storyTitle : (result?.title ?? 'appforge');
+    if (!html) return;
+    downloadHtml(html, title);
     showToast('Downloaded .html');
   };
 
   const onCopy = async () => {
-    if (!source) return;
+    const html = view === 'story' ? storyHtml : source;
+    if (!html) return;
     try {
-      await navigator.clipboard.writeText(source);
+      await navigator.clipboard.writeText(html);
       showToast('HTML copied to clipboard');
     } catch {
       showToast('Clipboard blocked — select source and copy manually');
@@ -229,12 +382,13 @@ export default function App() {
   };
 
   const onOpenPreview = () => {
-    if (!source.trim()) return;
+    const html = view === 'story' ? storyHtml : source;
+    if (!html.trim()) return;
     if (previewBlobRef.current) {
       URL.revokeObjectURL(previewBlobRef.current);
       previewBlobRef.current = null;
     }
-    const blob = new Blob([source], { type: 'text/html;charset=utf-8' });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     previewBlobRef.current = url;
     const win = window.open(url, '_blank', 'noopener,noreferrer');
@@ -260,11 +414,27 @@ export default function App() {
     }
   };
 
+  const loadStoryExample = () => {
+    const text = STORY_EXAMPLES.join('\n\n');
+    setStoryText(text);
+    setStoryBeats(
+      text
+        .split(/\n+/)
+        .map((b) => b.trim())
+        .filter(Boolean),
+    );
+    if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
+    void runStoryGenerate(text);
+  };
+
   const iframeSrcDoc = useMemo(() => previewHtml, [previewHtml]);
+  const storyIframeSrcDoc = useMemo(() => storyHtml, [storyHtml]);
   const hasBuild = Boolean(source.trim());
-  const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
-    ? '⌘'
-    : 'Ctrl';
+  const hasStory = Boolean(storyHtml.trim());
+  const modKey =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+      ? '⌘'
+      : 'Ctrl';
 
   return (
     <div className="app">
@@ -275,33 +445,71 @@ export default function App() {
           </span>
           AppForge
           <span className="stack-badge">
-            Vite · <em>Convex ready</em>
+            Vite · <em>StoryForge</em>
           </span>
         </button>
-        {view === 'studio' && (
+        <nav className="mode-tabs" aria-label="App mode">
+          <button
+            type="button"
+            className={`mode-tab${view === 'home' || view === 'studio' ? ' mode-tab-active' : ''}`}
+            onClick={onNewPrompt}
+          >
+            Forge
+          </button>
+          <button
+            type="button"
+            className={`mode-tab${view === 'story' ? ' mode-tab-active' : ''}`}
+            onClick={openStoryForge}
+          >
+            StoryForge
+          </button>
+        </nav>
+        {(view === 'studio' || view === 'story') && (
           <div className="topbar-actions">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={onRegenerate}
-              disabled={forging}
-            >
-              {forging ? 'Forging…' : 'Regenerate'}
-            </button>
+            {view === 'studio' && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={onRegenerate}
+                disabled={forging}
+              >
+                {forging ? 'Forging…' : 'Regenerate'}
+              </button>
+            )}
+            {view === 'story' && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => storyText.trim() && void runStoryGenerate(storyText)}
+                disabled={storyUpdating || !storyText.trim()}
+              >
+                {storyUpdating ? 'Updating…' : 'Refresh scene'}
+              </button>
+            )}
             <button type="button" className="btn btn-secondary" onClick={onNewPrompt}>
               New prompt
             </button>
-            <button type="button" className="btn btn-secondary" onClick={onDownload} disabled={!hasBuild}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onDownload}
+              disabled={view === 'story' ? !hasStory : !hasBuild}
+            >
               Download
             </button>
-            <button type="button" className="btn btn-secondary" onClick={onCopy} disabled={!hasBuild}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onCopy}
+              disabled={view === 'story' ? !hasStory : !hasBuild}
+            >
               Copy HTML
             </button>
             <button
               type="button"
               className="btn btn-secondary"
               onClick={onOpenPreview}
-              disabled={!hasBuild}
+              disabled={view === 'story' ? !hasStory : !hasBuild}
               title="Open current HTML in a new tab via blob URL"
             >
               Open preview
@@ -316,7 +524,11 @@ export default function App() {
             <p className="home-kicker">Prompt → live app</p>
             <h1 id="home-title">Build an app from a sentence</h1>
             <p className="home-lead">
-              Type what you want. Get a working web app you can remix, download, and own.
+              Type what you want. Get a working web app you can remix, download, and own — or open{' '}
+              <button type="button" className="text-link" onClick={openStoryForge}>
+                StoryForge
+              </button>{' '}
+              to watch a world grow as you tell a story.
             </p>
 
             <div className="prompt-card">
@@ -430,6 +642,137 @@ export default function App() {
               LLM when API key set · local templates fallback · {modKey}+Enter to Build
               {project ? ` · last project ${project.id.slice(0, 8)}` : ''}
             </p>
+          </section>
+        ) : view === 'story' ? (
+          <section className="storyforge" aria-label="StoryForge">
+            <div className="studio-status" role="status">
+              <span className="studio-status-label">StoryForge</span>
+              <span className="studio-status-value">
+                {storyUsedFallback
+                  ? 'offline scene'
+                  : storyModel
+                    ? `LLM · ${storyModel}`
+                    : hasStory
+                      ? 'live scene'
+                      : 'waiting'}
+              </span>
+              <span className="studio-status-sep" aria-hidden>
+                ·
+              </span>
+              <span className="studio-status-title" title={storyTitle}>
+                {storyTitle}
+              </span>
+              {storyUpdating && (
+                <span className="scene-updating" aria-live="polite">
+                  scene updating…
+                </span>
+              )}
+            </div>
+
+            <div className="pane pane-story">
+              <div className="pane-header">
+                <span>Story</span>
+                <span className="pane-meta">{storyBeats.length} beats</span>
+              </div>
+              <div className="story-body">
+                <p className="story-intro">
+                  Tell a story. The live preview evolves as beats land — clicks in the scene should
+                  change state, not sit as costume stubs.
+                </p>
+                <label className="sr-only" htmlFor="story-transcript">
+                  Story transcript
+                </label>
+                <textarea
+                  id="story-transcript"
+                  className="story-transcript"
+                  value={storyText}
+                  onChange={(e) => onStoryTextChange(e.target.value)}
+                  placeholder="Type your story… pauses (~1.5s) refresh the scene. Or add beats below."
+                  spellCheck
+                />
+                {storyBeats.length > 0 && (
+                  <ol className="story-beats" aria-label="Committed beats">
+                    {storyBeats.map((b, i) => (
+                      <li key={`${i}-${b.slice(0, 24)}`}>
+                        <span className="beat-n">{i + 1}</span>
+                        <span className="beat-t">{b}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <div className="story-compose">
+                  <label className="sr-only" htmlFor="story-draft">
+                    Next beat
+                  </label>
+                  <input
+                    id="story-draft"
+                    type="text"
+                    className="story-draft"
+                    value={storyDraft}
+                    onChange={(e) => setStoryDraft(e.target.value)}
+                    placeholder="Next beat — Enter to commit"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitBeat();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={commitBeat}
+                    disabled={!storyDraft.trim()}
+                  >
+                    Commit beat
+                  </button>
+                </div>
+                <div className="story-tools">
+                  <button type="button" className="btn btn-secondary" onClick={loadStoryExample}>
+                    Load demo story
+                  </button>
+                  <span className="kbd-hint">
+                    <kbd>Enter</kbd>
+                    <span className="kbd-hint-text">commits beat · typing pauses refresh scene</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pane pane-live">
+              <div className="pane-header">
+                <span>Live</span>
+                <div className="pane-header-right">
+                  <span className="pane-meta">{storyTitle}</span>
+                  {hasStory && (
+                    <button
+                      type="button"
+                      className="pane-action"
+                      onClick={onOpenPreview}
+                      title="Open preview in new tab"
+                    >
+                      Open ↗
+                    </button>
+                  )}
+                </div>
+              </div>
+              {hasStory ? (
+                <iframe
+                  className="preview-frame"
+                  title="StoryForge live preview"
+                  sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
+                  srcDoc={storyIframeSrcDoc}
+                />
+              ) : (
+                <div className="empty-state empty-state-live" role="status">
+                  <p className="empty-title">Scene waits for a story</p>
+                  <p className="empty-body">
+                    Type on the left (or load the demo). When you pause or commit a beat, the
+                    interactive world appears here.
+                  </p>
+                </div>
+              )}
+            </div>
           </section>
         ) : (
           <section className="studio" aria-label="Remix studio">

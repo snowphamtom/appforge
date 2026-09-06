@@ -53,9 +53,18 @@ export function appforgeGenerateApi(): Plugin {
         try {
           const raw = await readBody(req);
           let prompt = '';
+          let priorHtml = '';
+          let generateMode: 'forge' | 'story' = 'forge';
           try {
-            const parsed = JSON.parse(raw || '{}') as { prompt?: unknown };
+            const parsed = JSON.parse(raw || '{}') as {
+              prompt?: unknown;
+              priorHtml?: unknown;
+              mode?: unknown;
+            };
             prompt = typeof parsed.prompt === 'string' ? parsed.prompt : '';
+            priorHtml =
+              typeof parsed.priorHtml === 'string' ? parsed.priorHtml : '';
+            if (parsed.mode === 'story') generateMode = 'story';
           } catch {
             sendJson(res, 400, { error: 'Invalid JSON body' });
             return;
@@ -82,7 +91,10 @@ export function appforgeGenerateApi(): Plugin {
             return;
           }
 
-          const result = await generateWithLlm(prompt, config);
+          const result = await generateWithLlm(prompt, config, {
+            mode: generateMode,
+            priorHtml: priorHtml || undefined,
+          });
           sendJson(res, 200, result);
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Generate failed';
