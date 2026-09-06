@@ -261,3 +261,192 @@ export async function generateWithLlm(
     model: config.model,
   };
 }
+
+/** SSE / stream event emitted by generateWithLlmStream */
+export type LlmStreamEvent =
+  | { type: "meta"; model: string; provider: LlmProvider }
+  | { type: "delta"; text: string }
+  | { type: "done"; result: LlmGenerateResult };
+
+function assertNotAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    const err = new Error("Aborted");
+    err.name = "AbortError";
+    throw err;
+  }
+}
+
+async function* iterOpenAiCompatStream(
+  res: Response,
+): AsyncGenerator<string> {
+  if (!res.body) throw new Error("LLM stream returned no body");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) continue;
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === "[DONE]") return;
+        try {
+          const json = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string | null } }>;
+          };
+          const piece = json.choices?.[0]?.delta?.content;
+          if (typeof piece === "string" && piece.length > 0) yield piece;
+        } catch {
+          /* skip malformed chunk */
+        }
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function* iterGeminiSseStream(res: Response): AsyncGenerator<string> {
+  if (!res.body) throw new Error("Gemini stream returned no body");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const json = JSON.parse(payload) as {
+            candidates?: Array<{
+              content?: { parts?: Array<{ text?: string }> };
+            }>;
+          };
+          const piece = json.candidates?.[0]?.content?.parts
+            ?.map((p) => p.text || "")
+            .join("");
+          if (piece) yield piece;
+        } catch {
+          /* skip */
+        }
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Stream LLM HTML generation (OpenAI-compat + Gemini SSE).
+ * Yields meta → delta* → done. Caller handles AbortSignal via options.signal.
+ */
+export async function* generateWithLlmStream(
+  prompt: string,
+  config: LlmConfig,
+  options?: GenerateOptions & { signal?: AbortSignal },
+): AsyncGenerator<LlmStreamEvent> {
+  const mode = options?.mode === "story" ? "story" : "forge";
+  const system = mode === "story" ? STORY_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const userPrompt = buildUserPrompt(prompt, options);
+  const signal = options?.signal;
+
+  assertNotAborted(signal);
+  yield { type: "meta", model: config.model, provider: config.provider };
+
+  let res: Response;
+  if (config.provider === "gemini") {
+    res = await fetch(
+      `${config.baseUrl}/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(config.apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: mode === "story" ? 0.75 : 0.7 },
+        }),
+        signal,
+      },
+    );
+  } else {
+    res = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+        ...(config.provider === "openrouter"
+          ? {
+              "HTTP-Referer": "https://snowphamtom.github.io/appforge/",
+              "X-Title": "AppForge",
+            }
+          : {}),
+      },
+      body: JSON.stringify({
+        model: config.model,
+        temperature: mode === "story" ? 0.75 : 0.7,
+        stream: true,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+      signal,
+    });
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `LLM HTTP ${res.status}${body ? `: ${body.slice(0, 240)}` : ""}`,
+    );
+  }
+
+  let raw = "";
+  const chunks =
+    config.provider === "gemini"
+      ? iterGeminiSseStream(res)
+      : iterOpenAiCompatStream(res);
+
+  for await (const piece of chunks) {
+    assertNotAborted(signal);
+    raw += piece;
+    yield { type: "delta", text: piece };
+  }
+
+  assertNotAborted(signal);
+  const html = stripFences(raw);
+  if (!/<!DOCTYPE\s+html/i.test(html) && !/<html[\s>]/i.test(html)) {
+    throw new Error("LLM stream response was not an HTML document");
+  }
+
+  yield {
+    type: "done",
+    result: {
+      html,
+      title: extractTitle(html, prompt),
+      kind: "llm",
+      model: config.model,
+    },
+  };
+}

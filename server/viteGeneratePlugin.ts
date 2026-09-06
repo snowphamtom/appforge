@@ -1,11 +1,16 @@
 /**
  * Vite plugin: POST /api/generate → LLM HTML (dev server only).
+ * Also POST /api/generate/stream → SSE token stream for StoryForge live preview.
  * Keys never ship in the client bundle.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { loadEnv } from 'vite';
-import { generateWithLlm, resolveLlmConfig } from './llmGenerate.ts';
+import {
+  generateWithLlm,
+  generateWithLlmStream,
+  resolveLlmConfig,
+} from './llmGenerate.ts';
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -26,13 +31,43 @@ function sendJson(res: ServerResponse, status: number, payload: unknown) {
   res.end(body);
 }
 
+function writeSse(res: ServerResponse, event: string, data: unknown) {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+type ParsedBody = {
+  prompt: string;
+  priorHtml: string;
+  generateMode: 'forge' | 'story';
+};
+
+function parseGenerateBody(raw: string): ParsedBody | { error: string } {
+  try {
+    const parsed = JSON.parse(raw || '{}') as {
+      prompt?: unknown;
+      priorHtml?: unknown;
+      mode?: unknown;
+    };
+    const prompt = typeof parsed.prompt === 'string' ? parsed.prompt : '';
+    const priorHtml =
+      typeof parsed.priorHtml === 'string' ? parsed.priorHtml : '';
+    const generateMode: 'forge' | 'story' =
+      parsed.mode === 'story' ? 'story' : 'forge';
+    return { prompt, priorHtml, generateMode };
+  } catch {
+    return { error: 'Invalid JSON body' };
+  }
+}
+
 export function appforgeGenerateApi(): Plugin {
   return {
     name: 'appforge-generate-api',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url?.split('?')[0] ?? '';
-        if (url !== '/api/generate') {
+        const isStream = url === '/api/generate/stream';
+        const isGenerate = url === '/api/generate';
+        if (!isStream && !isGenerate) {
           next();
           return;
         }
@@ -40,7 +75,10 @@ export function appforgeGenerateApi(): Plugin {
         if (req.method === 'OPTIONS') {
           res.statusCode = 204;
           res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+          res.setHeader(
+            'Access-Control-Allow-Headers',
+            'Content-Type, Accept',
+          );
           res.end();
           return;
         }
@@ -52,23 +90,12 @@ export function appforgeGenerateApi(): Plugin {
 
         try {
           const raw = await readBody(req);
-          let prompt = '';
-          let priorHtml = '';
-          let generateMode: 'forge' | 'story' = 'forge';
-          try {
-            const parsed = JSON.parse(raw || '{}') as {
-              prompt?: unknown;
-              priorHtml?: unknown;
-              mode?: unknown;
-            };
-            prompt = typeof parsed.prompt === 'string' ? parsed.prompt : '';
-            priorHtml =
-              typeof parsed.priorHtml === 'string' ? parsed.priorHtml : '';
-            if (parsed.mode === 'story') generateMode = 'story';
-          } catch {
-            sendJson(res, 400, { error: 'Invalid JSON body' });
+          const parsed = parseGenerateBody(raw);
+          if ('error' in parsed) {
+            sendJson(res, 400, { error: parsed.error });
             return;
           }
+          const { prompt, priorHtml, generateMode } = parsed;
 
           if (!prompt.trim()) {
             sendJson(res, 400, { error: 'prompt is required' });
@@ -88,6 +115,58 @@ export function appforgeGenerateApi(): Plugin {
               code: 'NO_API_KEY',
               hint: 'Set XAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, OLLAMA_BASE_URL, or OPENAI_API_KEY in .env / .env.local',
             });
+            return;
+          }
+
+          if (isStream) {
+            const ac = new AbortController();
+            const onClose = () => ac.abort();
+            req.on('close', onClose);
+
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+            res.setHeader('Cache-Control', 'no-store, no-transform');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
+            // Flush headers early for proxies
+            if (typeof (res as ServerResponse & { flushHeaders?: () => void }).flushHeaders === 'function') {
+              (res as ServerResponse & { flushHeaders: () => void }).flushHeaders();
+            }
+
+            try {
+              for await (const ev of generateWithLlmStream(prompt, config, {
+                mode: generateMode,
+                priorHtml: priorHtml || undefined,
+                signal: ac.signal,
+              })) {
+                if (ac.signal.aborted || res.writableEnded) break;
+                if (ev.type === 'meta') {
+                  writeSse(res, 'meta', {
+                    model: ev.model,
+                    provider: ev.provider,
+                  });
+                } else if (ev.type === 'delta') {
+                  writeSse(res, 'delta', { text: ev.text });
+                } else if (ev.type === 'done') {
+                  writeSse(res, 'done', ev.result);
+                }
+              }
+            } catch (err) {
+              if (!ac.signal.aborted && !res.writableEnded) {
+                const message =
+                  err instanceof Error ? err.message : 'Generate failed';
+                const name = err instanceof Error ? err.name : '';
+                if (name !== 'AbortError') {
+                  writeSse(res, 'error', {
+                    error: message,
+                    code: 'LLM_ERROR',
+                  });
+                }
+              }
+            } finally {
+              req.off('close', onClose);
+              if (!res.writableEnded) res.end();
+            }
             return;
           }
 

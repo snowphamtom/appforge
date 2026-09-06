@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { EXAMPLE_PROMPTS, generateApp, type GenerateResult } from './lib/generator';
 import { generateStoryScene } from './lib/storyScene';
+import { tryLlmGenerateStream } from './lib/streamHtml';
 import {
   createSpeechRecognition,
   isSpeechSupported,
@@ -132,6 +133,7 @@ export default function App() {
   const [storyHtml, setStoryHtml] = useState('');
   const [storyTitle, setStoryTitle] = useState('StoryForge');
   const [storyUpdating, setStoryUpdating] = useState(false);
+  const [storyStreaming, setStoryStreaming] = useState(false);
   const [storyUsedFallback, setStoryUsedFallback] = useState(false);
   const [storyModel, setStoryModel] = useState<string | undefined>();
   const [storyQueued, setStoryQueued] = useState(false);
@@ -144,6 +146,8 @@ export default function App() {
   const storyTicketRef = useRef(0);
   const storyAbortRef = useRef<AbortController | null>(null);
   const storyHtmlRef = useRef('');
+  /** Last fully committed scene — used as priorHtml (not mid-stream partials). */
+  const storyCommittedHtmlRef = useRef('');
   const storyTextRef = useRef('');
   const storyDraftRef = useRef('');
   const speechRecRef = useRef<SpeechRec | null>(null);
@@ -238,25 +242,57 @@ export default function App() {
       storyAbortRef.current = ac;
       const ticket = ++storyTicketRef.current;
       setStoryUpdating(true);
-
-      const prior = storyHtmlRef.current.trim() || undefined;
+      setStoryStreaming(false);
+      // Restore last committed scene until the new stream paints its first checkpoint
+      const prior = storyCommittedHtmlRef.current.trim() || undefined;
+      if (prior) {
+        setStoryHtml(prior);
+        storyHtmlRef.current = prior;
+      }
       let gen: GenerateResult;
       let usedFallback = false;
 
+      const isAbort = (err: unknown) =>
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && err.name === 'AbortError') ||
+        ac.signal.aborted ||
+        ticket !== storyTicketRef.current;
+
       try {
         try {
-          gen = await tryLlmGenerate(trimmed, {
+          // Preferred: SSE token stream → live iframe checkpoints
+          gen = await tryLlmGenerateStream(trimmed, {
             mode: 'story',
             priorHtml: prior,
             signal: ac.signal,
+            onMeta: ({ model }) => {
+              if (ticket !== storyTicketRef.current) return;
+              if (model) setStoryModel(model);
+              setStoryStreaming(true);
+            },
+            onPartialHtml: (html, meta) => {
+              if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
+              setStoryHtml(html);
+              storyHtmlRef.current = html;
+              if (meta.title) setStoryTitle(meta.title);
+              setStoryStreaming(meta.streaming);
+              setStoryUsedFallback(false);
+            },
           });
-        } catch (err) {
-          if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
-          // AbortError / fetch abort should never become an offline scene
-          if (err instanceof DOMException && err.name === 'AbortError') return;
-          if (err instanceof Error && err.name === 'AbortError') return;
-          gen = generateStoryScene(trimmed);
-          usedFallback = true;
+        } catch (streamErr) {
+          if (isAbort(streamErr)) return;
+          // Fallback: one-shot /api/generate (keeps Forge path shared)
+          try {
+            gen = await tryLlmGenerate(trimmed, {
+              mode: 'story',
+              priorHtml: prior,
+              signal: ac.signal,
+            });
+          } catch (err) {
+            if (isAbort(err)) return;
+            gen = generateStoryScene(trimmed);
+            usedFallback = true;
+          }
         }
         if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
 
@@ -265,6 +301,7 @@ export default function App() {
         setStoryModel(gen.model);
         setStoryUsedFallback(usedFallback);
         storyHtmlRef.current = gen.html;
+        storyCommittedHtmlRef.current = gen.html;
 
         saveGenerationLocal({
           prompt: trimmed,
@@ -279,6 +316,7 @@ export default function App() {
       } finally {
         if (ticket === storyTicketRef.current) {
           setStoryUpdating(false);
+          setStoryStreaming(false);
           setStoryQueued(false);
         }
       }
@@ -448,6 +486,7 @@ export default function App() {
       setStoryHtml(rec.html);
       setStoryTitle(rec.title);
       storyHtmlRef.current = rec.html;
+      storyCommittedHtmlRef.current = rec.html;
       setView('story');
       showToast('Reopened StoryForge scene');
       return;
@@ -577,6 +616,7 @@ export default function App() {
     // Fresh world for demo magic — do not evolve prior HTML
     setStoryHtml('');
     storyHtmlRef.current = '';
+    storyCommittedHtmlRef.current = '';
     setStoryTitle('StoryForge');
     setStoryUsedFallback(false);
     setStoryModel(undefined);
@@ -828,7 +868,11 @@ export default function App() {
                 ·
               </span>
               <span className="studio-status-beats">{storyBeats.length} beats</span>
-              {storyUpdating ? (
+              {storyStreaming ? (
+                <span className="scene-streaming" aria-live="polite">
+                  scene streaming…
+                </span>
+              ) : storyUpdating ? (
                 <span className="scene-updating" aria-live="polite">
                   scene updating…
                 </span>
@@ -850,8 +894,8 @@ export default function App() {
               </div>
               <div className="story-body">
                 <p className="story-intro">
-                  Tell a story. The live preview evolves as beats land — clicks in the scene should
-                  change state, not sit as costume stubs.
+                  Tell a story. The live preview streams in as the model writes HTML — clicks in the
+                  scene should change state, not sit as costume stubs.
                 </p>
                 <label className="sr-only" htmlFor="story-transcript">
                   Story transcript
@@ -981,7 +1025,7 @@ export default function App() {
                     sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
                     srcDoc={storyIframeSrcDoc}
                   />
-                  {storyUpdating && (
+                  {storyUpdating && !storyStreaming && (
                     <div className="preview-updating" aria-hidden>
                       <span>Updating scene…</span>
                     </div>
