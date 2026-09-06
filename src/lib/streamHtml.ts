@@ -108,6 +108,12 @@ export async function tryLlmGenerateStream(
   opts: {
     priorHtml?: string;
     mode?: 'forge' | 'story';
+    worldMemory?: {
+      characters?: string[];
+      setting?: string[];
+      props?: string[];
+      mood?: string;
+    };
     signal?: AbortSignal;
   } & StreamGenerateCallbacks = {},
 ): Promise<StreamGenerateResult> {
@@ -121,6 +127,7 @@ export async function tryLlmGenerateStream(
       prompt,
       priorHtml: opts.priorHtml,
       mode: opts.mode ?? 'forge',
+      worldMemory: opts.worldMemory,
     }),
     signal: opts.signal,
   });

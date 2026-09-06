@@ -10,6 +10,7 @@ import {
   generateWithLlm,
   generateWithLlmStream,
   resolveLlmConfig,
+  type WorldMemoryInput,
 } from './llmGenerate.ts';
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -39,7 +40,29 @@ type ParsedBody = {
   prompt: string;
   priorHtml: string;
   generateMode: 'forge' | 'story';
+  worldMemory?: WorldMemoryInput;
 };
+
+function parseWorldMemory(raw: unknown): WorldMemoryInput | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const list = (v: unknown): string[] | undefined => {
+    if (!Array.isArray(v)) return undefined;
+    const out = v
+      .filter((x): x is string => typeof x === 'string')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    return out.length ? out : undefined;
+  };
+  const characters = list(o.characters);
+  const setting = list(o.setting);
+  const props = list(o.props);
+  const mood =
+    typeof o.mood === 'string' && o.mood.trim() ? o.mood.trim().slice(0, 80) : undefined;
+  if (!characters && !setting && !props && !mood) return undefined;
+  return { characters, setting, props, mood };
+}
 
 function parseGenerateBody(raw: string): ParsedBody | { error: string } {
   try {
@@ -47,13 +70,15 @@ function parseGenerateBody(raw: string): ParsedBody | { error: string } {
       prompt?: unknown;
       priorHtml?: unknown;
       mode?: unknown;
+      worldMemory?: unknown;
     };
     const prompt = typeof parsed.prompt === 'string' ? parsed.prompt : '';
     const priorHtml =
       typeof parsed.priorHtml === 'string' ? parsed.priorHtml : '';
     const generateMode: 'forge' | 'story' =
       parsed.mode === 'story' ? 'story' : 'forge';
-    return { prompt, priorHtml, generateMode };
+    const worldMemory = parseWorldMemory(parsed.worldMemory);
+    return { prompt, priorHtml, generateMode, worldMemory };
   } catch {
     return { error: 'Invalid JSON body' };
   }
@@ -95,7 +120,7 @@ export function appforgeGenerateApi(): Plugin {
             sendJson(res, 400, { error: parsed.error });
             return;
           }
-          const { prompt, priorHtml, generateMode } = parsed;
+          const { prompt, priorHtml, generateMode, worldMemory } = parsed;
 
           if (!prompt.trim()) {
             sendJson(res, 400, { error: 'prompt is required' });
@@ -137,6 +162,7 @@ export function appforgeGenerateApi(): Plugin {
               for await (const ev of generateWithLlmStream(prompt, config, {
                 mode: generateMode,
                 priorHtml: priorHtml || undefined,
+                worldMemory,
                 signal: ac.signal,
               })) {
                 if (ac.signal.aborted || res.writableEnded) break;
@@ -173,6 +199,7 @@ export function appforgeGenerateApi(): Plugin {
           const result = await generateWithLlm(prompt, config, {
             mode: generateMode,
             priorHtml: priorHtml || undefined,
+            worldMemory,
           });
           sendJson(res, 200, result);
         } catch (err) {

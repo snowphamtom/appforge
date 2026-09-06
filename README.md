@@ -57,6 +57,7 @@ Mode inside AppForge (toggle **StoryForge** in the top bar). Not a separate prod
 5. When a prior **committed** scene exists, the client sends `priorHtml` with `mode: "story"` so the world **evolves**. Mid-stream partials are not used as prior.
 6. New beats **abort** in-flight streams; status shows **scene streaming…** / **scene updating…**.
 7. Fallbacks: non-stream `POST /api/generate`, then offline `src/lib/storyScene.ts` if LLM/stream fails.
+8. **World bible** — editable Characters / Setting / Props / Mood chips (heuristic extract from story + manual edits). Sent as `worldMemory` on generate/stream so scenes stay consistent; also honored offline. Draft (story + bible) persists in `localStorage`.
 
 Keeps one-shot Forge + remix studio unchanged. No Convex attach. No payments.
 
