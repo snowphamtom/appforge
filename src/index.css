@@ -1,0 +1,53 @@
+:root {
+  --bg: #070a0e;
+  --bg-elevated: #0d1218;
+  --surface: #121820;
+  --surface-hover: #1a222c;
+  --border: #243041;
+  --border-strong: #334155;
+  --text: #e8eef6;
+  --text-muted: #8494a8;
+  --accent: #5eead4;
+  --accent-hover: #2dd4bf;
+  --accent-fg: #042f2e;
+  --accent-glow: rgba(94, 234, 212, 0.12);
+  --danger: #f87171;
+  --ok: #4ade80;
+  --radius: 12px;
+  --font: "IBM Plex Sans", "Inter", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(94, 234, 212, 0.08), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(56, 189, 248, 0.04), transparent);
+  background-attachment: fixed;
+}
+
+button, input, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
