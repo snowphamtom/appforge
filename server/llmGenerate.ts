@@ -27,13 +27,22 @@ export interface LlmGenerateResult {
 
 /**
  * Priority: XAI → GEMINI → GROQ → OPENROUTER → OLLAMA → OPENAI
- * (first configured provider wins).
+ * (first configured provider with a real key wins; stubs len≤20 ignored).
  * Free-tier friendly: Groq, OpenRouter, local Ollama.
  * Ollama activates when OLLAMA_BASE_URL, OLLAMA_MODEL, or OLLAMA_ENABLED=1 is set.
  */
+/** Reject secure-card stubs / placeholders (e.g. len-8 Dam…). Real keys are longer. */
+function isRealApiKey(value: string, minLen = 21): boolean {
+  const v = value.trim();
+  if (v.length < minLen) return false;
+  // Common placeholder crumbs
+  if (/^(dam|xxx|your-|changeme|placeholder|sk-o$)/i.test(v)) return false;
+  return true;
+}
+
 export function resolveLlmConfig(env: Record<string, string>): LlmConfig | null {
   const xai = (env.XAI_API_KEY || "").trim();
-  if (xai) {
+  if (isRealApiKey(xai)) {
     const model = (env.XAI_MODEL || "").trim() || "grok-2-latest";
     return {
       apiKey: xai,
@@ -43,7 +52,7 @@ export function resolveLlmConfig(env: Record<string, string>): LlmConfig | null 
     };
   }
   const gemini = (env.GEMINI_API_KEY || env.GOOGLE_API_KEY || "").trim();
-  if (gemini) {
+  if (isRealApiKey(gemini)) {
     return {
       apiKey: gemini,
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -52,7 +61,7 @@ export function resolveLlmConfig(env: Record<string, string>): LlmConfig | null 
     };
   }
   const groq = (env.GROQ_API_KEY || "").trim();
-  if (groq) {
+  if (isRealApiKey(groq)) {
     return {
       apiKey: groq,
       baseUrl: "https://api.groq.com/openai/v1",
@@ -61,7 +70,7 @@ export function resolveLlmConfig(env: Record<string, string>): LlmConfig | null 
     };
   }
   const openrouter = (env.OPENROUTER_API_KEY || "").trim();
-  if (openrouter) {
+  if (isRealApiKey(openrouter)) {
     return {
       apiKey: openrouter,
       baseUrl: "https://openrouter.ai/api/v1",
@@ -88,7 +97,7 @@ export function resolveLlmConfig(env: Record<string, string>): LlmConfig | null 
   }
 
   const openai = (env.OPENAI_API_KEY || "").trim();
-  if (openai) {
+  if (isRealApiKey(openai)) {
     return {
       apiKey: openai,
       baseUrl: "https://api.openai.com/v1",
