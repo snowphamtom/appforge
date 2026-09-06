@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { EXAMPLE_PROMPTS, generateApp, type GenerateResult } from './lib/generator';
 import { generateStoryScene } from './lib/storyScene';
+import { injectInteractiveScene } from './lib/injectInteractiveScene';
 import { tryLlmGenerateStream } from './lib/streamHtml';
 import {
   EMPTY_WORLD_MEMORY,
@@ -370,8 +371,10 @@ export default function App() {
             },
             onPartialHtml: (html, meta) => {
               if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
-              setStoryHtml(html);
-              storyHtmlRef.current = html;
+              // Mid-stream: leave overlay/partial HTML alone. On done, inject click→state.
+              const next = meta.streaming ? html : injectInteractiveScene(html);
+              setStoryHtml(next);
+              storyHtmlRef.current = next;
               if (meta.title) setStoryTitle(meta.title);
               setStoryStreaming(meta.streaming);
               setStoryUsedFallback(false);
@@ -395,19 +398,22 @@ export default function App() {
         }
         if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
 
-        setStoryHtml(gen.html);
+        // Post-commit leap: ensure props/characters are clickable even if the model omitted handlers.
+        // Offline storyScene is left untouched (inject no-ops).
+        const committedHtml = injectInteractiveScene(gen.html);
+        setStoryHtml(committedHtml);
         setStoryTitle(gen.title);
         setStoryModel(gen.model);
         setStoryUsedFallback(usedFallback);
-        storyHtmlRef.current = gen.html;
-        storyCommittedHtmlRef.current = gen.html;
+        storyHtmlRef.current = committedHtml;
+        storyCommittedHtmlRef.current = committedHtml;
         {
           const beats = trimmed
             .split(/\n+/)
             .map((b) => b.trim())
             .filter(Boolean);
-          if (beats.length > 0 && gen.html.trim()) {
-            beatSnapshotsRef.current.set(beats.length - 1, gen.html);
+          if (beats.length > 0 && committedHtml.trim()) {
+            beatSnapshotsRef.current.set(beats.length - 1, committedHtml);
             setBeatSnapKeys([...beatSnapshotsRef.current.keys()].sort((a, b) => a - b));
           }
         }
@@ -416,7 +422,7 @@ export default function App() {
           prompt: trimmed,
           title: gen.title,
           kind: gen.kind,
-          html: gen.html,
+          html: committedHtml,
         });
         refreshRecent();
         if (usedFallback) {
@@ -738,8 +744,9 @@ export default function App() {
 
       const snap = beatSnapshotsRef.current.get(index);
       if (snap && snap.trim()) {
-        setStoryHtml(snap);
-        storyHtmlRef.current = snap;
+        const restored = injectInteractiveScene(snap);
+        setStoryHtml(restored);
+        storyHtmlRef.current = restored;
         setScrubBeatIndex(index);
         showToast(`Scrubbed to beat ${index + 1}`);
         return;
@@ -749,9 +756,10 @@ export default function App() {
       const truncated = storyBeatsRef.current.slice(0, index + 1).join('\n\n');
       if (!truncated.trim()) return;
       const gen = generateStoryScene(truncated, worldMemoryRef.current);
-      setStoryHtml(gen.html);
-      storyHtmlRef.current = gen.html;
-      beatSnapshotsRef.current.set(index, gen.html);
+      const offlineHtml = injectInteractiveScene(gen.html);
+      setStoryHtml(offlineHtml);
+      storyHtmlRef.current = offlineHtml;
+      beatSnapshotsRef.current.set(index, offlineHtml);
       setBeatSnapKeys([...beatSnapshotsRef.current.keys()].sort((a, b) => a - b));
       setScrubBeatIndex(index);
       showToast(`Re-forged offline scene at beat ${index + 1}`);
