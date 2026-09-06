@@ -760,15 +760,40 @@
 }
 
 .story-beats li {
+  margin: 0;
+  padding: 0;
+}
+
+.beat-btn {
   display: flex;
   gap: 0.55rem;
   align-items: flex-start;
+  width: 100%;
+  text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.55rem 0.7rem;
   font-size: 0.85rem;
   line-height: 1.4;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.beat-btn:hover {
+  border-color: var(--accent);
+  background: var(--panel);
+}
+
+.beat-btn-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.beat-btn-snap .beat-n {
+  color: var(--accent);
 }
 
 .beat-n {
@@ -782,6 +807,37 @@
 .beat-t {
   flex: 1;
   color: var(--text);
+}
+
+.beat-snap-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.story-export {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.story-export-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 0.15rem;
+}
+
+.scene-scrubbing {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--accent);
 }
 
 .story-compose {

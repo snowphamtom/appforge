@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** StoryForge export + beat timeline — 2026-09-06 ~5:15 PM CT  
+Export scene `.html`, transcript `.md`/`.txt`, and client ZIP pack (`story.md` + `scene.html` + `world-bible.json`). Beat timeline scrubs via session HTML snapshots (offline re-forge fallback). Stream/mic/memory/Forge unchanged.
+
 **Note:** StoryForge world memory (bible) — 2026-09-06 ~5:05 PM CT  
 Living cast/setting/props/mood panel; heuristic extract + manual chips; passed into stream/one-shot/offline prompts; session + localStorage draft persistence.
 
