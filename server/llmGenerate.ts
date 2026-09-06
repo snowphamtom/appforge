@@ -120,6 +120,27 @@ Hard requirements:
 6. Include a sensible <title> reflecting the app.
 7. No external network calls required for core functionality (except optional Google Fonts).`;
 
+export type GenerateMode = "forge" | "story";
+
+export interface GenerateOptions {
+  /** Previous scene HTML so StoryForge can evolve instead of restarting */
+  priorHtml?: string;
+  mode?: GenerateMode;
+}
+
+export const STORY_SYSTEM_PROMPT = `You are StoryForge inside AppForge — a live story→world engine.
+The user tells a story beat by beat. You emit ONE complete self-contained HTML5 scene that visualizes and makes interactive the story so far.
+
+Hard requirements:
+1. Output ONLY a single complete HTML5 document starting with <!DOCTYPE html>. No markdown, no fences, no commentary.
+2. Beautiful intentional dark UI (near-black, teal/cyan accents). Prefer IBM Plex Sans / Mono via Google Fonts. Avoid generic AI purple.
+3. Fully realize THIS story — characters, places, objects, mood from the user's beats. Not a costume stub or placeholder shell.
+4. LIVE interactivity required: clickable elements that change visible state (toggles, reveals, counters, inventory, dialogue choices, scene props). Use inline JS + localStorage if useful. Clicks must mutate the DOM — no dead decoration.
+5. All CSS/JS inline (or in <style>/<script>). Google Fonts CSS OK. NO external JS CDNs.
+6. Include a sensible <title> reflecting the story world.
+7. No external network calls for core function (except optional Google Fonts).
+8. If prior HTML is provided, EVOLVE that scene: keep working interactions and visual identity, then add/adapt for new beats. Do not throw away the world and restart from a blank template unless the story clearly demands a total scene change.`;
+
 function stripFences(text: string): string {
   let s = text.trim();
   if (s.startsWith("```")) {
@@ -146,11 +167,33 @@ function extractTitle(html: string, fallback: string): string {
   return t.length > 60 ? t.slice(0, 57) + "…" : t;
 }
 
+function buildUserPrompt(
+  prompt: string,
+  options?: GenerateOptions,
+): string {
+  const story = prompt.trim();
+  const mode = options?.mode === "story" ? "story" : "forge";
+  const prior = (options?.priorHtml || "").trim();
+
+  if (mode === "story") {
+    const priorBlock =
+      prior.length > 0
+        ? `\n\nPRIOR SCENE HTML (evolve this — keep live click→state interactions; extend for new beats):\n\`\`\`html\n${prior.slice(0, 120_000)}\n\`\`\`\n`
+        : "\n\nNo prior scene yet — create the first interactive world from the story so far.\n";
+    return `Story so far (all beats):\n\n${story}${priorBlock}\nEmit one complete interactive HTML scene for this story. Every meaningful prop/character cue should be clickable or stateful.`;
+  }
+
+  return `Build this as one perfect self-contained HTML app:\n\n${story}`;
+}
+
 export async function generateWithLlm(
   prompt: string,
   config: LlmConfig,
+  options?: GenerateOptions,
 ): Promise<LlmGenerateResult> {
-  const userPrompt = `Build this as one perfect self-contained HTML app:\n\n${prompt.trim()}`;
+  const mode = options?.mode === "story" ? "story" : "forge";
+  const system = mode === "story" ? STORY_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const userPrompt = buildUserPrompt(prompt, options);
   const res =
     config.provider === "gemini"
       ? await fetch(
@@ -159,9 +202,9 @@ export async function generateWithLlm(
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              systemInstruction: { parts: [{ text: system }] },
               contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-              generationConfig: { temperature: 0.7 },
+              generationConfig: { temperature: mode === "story" ? 0.75 : 0.7 },
             }),
           },
         )
@@ -179,9 +222,9 @@ export async function generateWithLlm(
           },
           body: JSON.stringify({
             model: config.model,
-            temperature: 0.7,
+            temperature: mode === "story" ? 0.75 : 0.7,
             messages: [
-              { role: "system", content: SYSTEM_PROMPT },
+              { role: "system", content: system },
               { role: "user", content: userPrompt },
             ],
           }),

@@ -28,7 +28,7 @@ npm run preview      # serve the build
 1. Copy `.env.example` → `.env` (or `.env.local`).
 2. Set one provider (priority **XAI → GEMINI → GROQ → OPENROUTER → OLLAMA → OPENAI**): **`XAI_API_KEY`**, **`GEMINI_API_KEY`**, free **`GROQ_API_KEY`** / **`OPENROUTER_API_KEY`**, local **`OLLAMA_BASE_URL`** + **`OLLAMA_MODEL`** (default `llama3.2:1b`), or `OPENAI_API_KEY`.
 3. Models: xAI `grok-2-latest`; Gemini `gemini-2.5-flash`; Groq `llama-3.3-70b-versatile`; OpenRouter `openrouter/auto`; Ollama `llama3.2:1b`; OpenAI `gpt-4o-mini`.
-4. Build sends `{ prompt }` to `/api/generate` and returns `{ html, title, kind: 'llm', model }`. Env files are loaded per request — no restart required for `.env` / `.env.local` changes.
+4. Build sends `{ prompt }` (StoryForge also sends `mode: "story"` + optional `priorHtml`) to `/api/generate` and returns `{ html, title, kind: 'llm', model }`. Env files are loaded per request — no restart required for `.env` / `.env.local` changes.
 5. On failure (no key / network / static host), AppForge uses local templates and toasts: *Using local templates (add API key for LLM)*.
 
 Example chips use the same path: LLM when the key is present, otherwise fast local templates.
@@ -44,6 +44,20 @@ The static Pages host **cannot** call the LLM — there is no Node backend. Depl
 3. **Studio** — left: editable source; right: sandboxed iframe (debounced live update).
 4. **Remix** — Regenerate / New prompt / Download `.html` / Copy HTML to clipboard.
 5. **URL seed** — optional Firecrawl stub seeds a prompt from a URL (live scrape via Convex).
+6. **StoryForge** — verbal → visual: tell a story and watch a live interactive scene grow (see below).
+
+## StoryForge
+
+Mode inside AppForge (toggle **StoryForge** in the top bar). Not a separate product.
+
+1. Open `http://localhost:5173` → click **StoryForge**.
+2. Type a story in the left transcript (or **Load demo story** / commit beats with Enter).
+3. After a ~1.5s typing pause — or on beat commit — the right iframe regenerates from the **full story so far**.
+4. When a prior scene exists, the client sends `priorHtml` with `mode: "story"` so the world **evolves** (live click→state), instead of one-shot restarts.
+5. Stale in-flight requests are aborted/ignored; status shows **scene updating…**.
+6. If the LLM is down / no key: offline interactive scene from `src/lib/storyScene.ts` (beats light the stage on click).
+
+Keeps one-shot Forge + remix studio unchanged. No Convex attach. No payments.
 
 ## Stack
 
