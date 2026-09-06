@@ -77,7 +77,7 @@ export function appforgeGenerateApi(): Plugin {
             sendJson(res, 503, {
               error: 'No API key',
               code: 'NO_API_KEY',
-              hint: 'Set XAI_API_KEY or OPENAI_API_KEY in .env and restart npm run dev',
+              hint: 'Set XAI_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in .env / .env.local',
             });
             return;
           }

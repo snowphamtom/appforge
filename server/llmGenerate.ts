@@ -3,7 +3,7 @@
  * API keys stay out of the client bundle.
  */
 
-export type LlmProvider = 'xai' | 'openai';
+export type LlmProvider = 'xai' | 'gemini' | 'openai';
 
 export interface LlmConfig {
   apiKey: string;
@@ -28,6 +28,15 @@ export function resolveLlmConfig(env: Record<string, string>): LlmConfig | null 
       baseUrl: 'https://api.x.ai/v1',
       model: model === 'grok-3' ? 'grok-3' : model,
       provider: 'xai',
+    };
+  }
+  const gemini = (env.GEMINI_API_KEY || '').trim();
+  if (gemini) {
+    return {
+      apiKey: gemini,
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      model: (env.GEMINI_MODEL || '').trim() || 'gemini-2.0-flash',
+      provider: 'gemini',
     };
   }
   const openai = (env.OPENAI_API_KEY || '').trim();

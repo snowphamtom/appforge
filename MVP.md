@@ -5,14 +5,14 @@
 
 ## Iterated studio
 
-**Note:** LLM generate wiring — 2026-09-06 ~3:45 PM CT  
-`POST /api/generate` via Vite middleware (xAI / OpenAI); async Build + “Forging your world…”; fallback toast for no key / Pages. Prior: mobile studio stack, Open preview, waitlist chip, template status, Pages base `/appforge/`.
+**Note:** Gemini key support — 2026-09-06 ~4:05 PM CT  
+`POST /api/generate` via Vite middleware (xAI → Gemini → OpenAI); `GEMINI_API_KEY` + OpenAI-compat endpoint; async Build + “Forging your world…”; fallback toast for no key / Pages. Prior: LLM wiring, mobile studio stack, Pages base `/appforge/`.
 
 ## In scope (v0 / v0.1)
 
 - Vite + React + TypeScript SPA at `/workspace/appforge`
 - Home: prompt textarea, Build, example chips, keyboard Build hint
-- **LLM generation** (local dev): `XAI_API_KEY` or `OPENAI_API_KEY` → one perfect HTML app; `kind: 'llm'`
+- **LLM generation** (local dev): `XAI_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` (priority XAI→GEMINI→OPENAI) → one perfect HTML app; `kind: 'llm'`
 - Local generator fallback: todo / tipjar / landing / habit / dashboard
 - Studio: editable HTML (Source) + sandboxed iframe (Live), debounced preview, empty-state
 - Regenerate, New prompt, Download `.html`, Copy HTML

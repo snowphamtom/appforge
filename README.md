@@ -9,13 +9,13 @@ Local `npm run dev` can call an LLM via `POST /api/generate` (API key stays on t
 ```bash
 cd /workspace/appforge
 npm install
-cp .env.example .env   # then add XAI_API_KEY or OPENAI_API_KEY
+cp .env.example .env   # then add XAI_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY
 npm run dev
 ```
 
 Open the printed local URL (default `http://localhost:5173`).
 
-**Restart `npm run dev` after changing `.env`** so the Vite middleware picks up the key.
+Keys in `.env` / `.env.local` are re-read on each `/api/generate` request (via `loadEnv`) — no restart needed when those files appear or change. Restart only if you rely on shell-exported `process.env` vars set before `npm run dev`.
 
 ```bash
 npm run build        # production / static build (no LLM API route)
@@ -25,10 +25,10 @@ npm run preview      # serve the build
 
 ## LLM generation (local / dev)
 
-1. Copy `.env.example` → `.env`.
-2. Set **`XAI_API_KEY`** (preferred — [api.x.ai](https://api.x.ai), OpenAI-compatible) **or** `OPENAI_API_KEY`.
-3. Models: xAI `grok-2-latest` (or `grok-3` via `XAI_MODEL`); OpenAI `gpt-4o-mini`.
-4. Restart `npm run dev`. Build sends `{ prompt }` to `/api/generate` and returns `{ html, title, kind: 'llm', model }`.
+1. Copy `.env.example` → `.env` (or `.env.local`).
+2. Set one key (priority **XAI → GEMINI → OPENAI**): **`XAI_API_KEY`** ([api.x.ai](https://api.x.ai)), **`GEMINI_API_KEY`** ([Google AI Studio](https://aistudio.google.com/) / Gemini OpenAI-compat), or `OPENAI_API_KEY`.
+3. Models: xAI `grok-2-latest` (or `grok-3` via `XAI_MODEL`); Gemini `gemini-2.0-flash` (`GEMINI_MODEL`); OpenAI `gpt-4o-mini`.
+4. Build sends `{ prompt }` to `/api/generate` and returns `{ html, title, kind: 'llm', model }`. Env files are loaded per request — no restart required for `.env` / `.env.local` changes.
 5. On failure (no key / network / static host), AppForge uses local templates and toasts: *Using local templates (add API key for LLM)*.
 
 Example chips use the same path: LLM when the key is present, otherwise fast local templates.
