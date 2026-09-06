@@ -51,7 +51,7 @@ The static Pages host **cannot** call the LLM — there is no Node backend. Depl
 Mode inside AppForge (toggle **StoryForge** in the top bar). Not a separate product.
 
 1. Open `http://localhost:5173` → click **StoryForge**.
-2. Type a story in the left transcript (or **Load demo story** / commit beats with Enter).
+2. Type or speak a story in the left transcript (or one-click a **mood preset** / commit beats with Enter). First-run strip shows type → stream → click; dismissible What's new lists stream / mic / bible / export / scrub / click.
 3. After a ~1s typing pause — or on beat commit — the right iframe regenerates from the **full story so far**.
 4. Preferred path: `POST /api/generate/stream` (SSE) streams HTML tokens; the iframe `srcDoc` updates on meaningful checkpoints (tag closes / ~1.2KB growth), then commits on `done`.
 5. When a prior **committed** scene exists, the client sends `priorHtml` with `mode: "story"` so the world **evolves**. Mid-stream partials are not used as prior.

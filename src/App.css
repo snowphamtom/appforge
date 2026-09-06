@@ -721,6 +721,201 @@
   background: var(--bg);
 }
 
+
+/* —— StoryForge first-run polish —— */
+.whats-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.4rem 0.55rem;
+  padding: 0.45rem 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.whats-new-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.28rem 0.65rem;
+  cursor: pointer;
+}
+
+.whats-new-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.whats-new-caret {
+  font-size: 0.65rem;
+  opacity: 0.8;
+}
+
+.whats-new-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.35rem 0.65rem;
+}
+
+.whats-new-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.whats-new-item-label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.whats-new-item-tip {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.whats-new-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.whats-new-dismiss:hover {
+  color: var(--text);
+  background: var(--accent-glow);
+}
+
+.story-onboard {
+  margin: 0;
+}
+
+.story-onboard-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.story-onboard-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem 0.3rem 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.story-onboard-n {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.story-onboard-t {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.story-onboard-steps-empty {
+  margin-top: 1rem;
+  justify-content: center;
+}
+
+.story-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.story-presets-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.story-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.story-preset-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  min-width: 7.5rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.story-preset-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.story-preset-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.story-preset-mood {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
 .story-intro {
   margin: 0;
   font-size: 0.85rem;
