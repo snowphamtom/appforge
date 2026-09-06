@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>CeilingGate · vibeapps UPDATE</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card: #12181f;
+      --border: #2a3544;
+      --text: #e8eef6;
+      --muted: #8b9bb0;
+      --accent: #5eead4;
+      --accent2: #f97316;
+      --ok: #4ade80;
+      --danger: #f87171;
+      --radius: 16px;
+      --font: system-ui, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+    body { padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom)); max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); font-size: 0.92rem; line-height: 1.45; margin: 0 0 1.25rem; }
+    .step {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1rem 1.1rem;
+      margin-bottom: 0.85rem;
+    }
+    .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.6rem; height: 1.6rem; border-radius: 999px;
+      background: #2dd4bf33; color: var(--accent); font-size: 0.8rem; font-weight: 700;
+      margin-right: 0.5rem;
+    }
+    .step h2 { font-size: 1.05rem; margin: 0 0 0.55rem; display: flex; align-items: center; }
+    .btn {
+      display: block; width: 100%; text-align: center; text-decoration: none;
+      padding: 0.95rem 1rem; border-radius: 14px; font-weight: 650; font-size: 1.05rem;
+      border: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+      margin-top: 0.55rem;
+    }
+    .btn-primary { background: var(--accent2); color: #111; }
+    .btn-accent { background: var(--accent); color: #06201c; }
+    .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .field { margin-top: 0.65rem; }
+    .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.25rem; }
+    .row {
+      display: flex; gap: 0.45rem; align-items: stretch;
+      background: #0b0f14; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    }
+    .row input, .row textarea {
+      flex: 1; border: 0; background: transparent; color: var(--text);
+      padding: 0.75rem 0.8rem; font: inherit; font-size: 0.9rem; resize: none;
+    }
+    .row button {
+      border: 0; background: #1a222c; color: var(--accent); font-weight: 650;
+      padding: 0 0.9rem; font-size: 0.85rem; white-space: nowrap;
+    }
+    .toast {
+      position: fixed; left: 50%; bottom: max(1.25rem, env(safe-area-inset-bottom));
+      transform: translateX(-50%) translateY(120%);
+      background: #14532d; color: #bbf7d0; padding: 0.65rem 1rem; border-radius: 999px;
+      font-size: 0.9rem; font-weight: 600; transition: transform 0.2s ease; z-index: 20;
+      pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .note { font-size: 0.85rem; color: var(--muted); margin-top: 0.55rem; line-height: 1.4; }
+    .warn { color: #fdba74; font-size: 0.85rem; line-height: 1.4; margin: 0 0 1rem; }
+    ul.check { margin: 0.4rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h1>CeilingGate card UPDATE</h1>
+  <p class="sub">Phone path — your iPhone can reach vibeapps; our box cannot. Sign in as yeti, then paste the fields below. <strong>UPDATE only — no new FILE.</strong></p>
+  <p class="warn">Skip the Firecrawl desktop live view on iPhone. Use these big buttons instead.</p>
+
+  <section class="step">
+    <h2><span class="step-num">1</span> Open your card</h2>
+    <a class="btn btn-primary" href="https://vibeapps.dev/s/ceilinggate" target="_blank" rel="noopener">Open CeilingGate on vibeapps</a>
+    <p class="note">Safari → Sign in (Google / GitHub as yeti or snowphamtom) → look for Edit on your listing.</p>
+  </section>
+
+  <section class="step">
+    <h2><span class="step-num">2</span> Copy fields into Edit</h2>
+
+    <div class="field">
+      <div class="label">Tags</div>
+      <div class="row">
+        <input id="tags" readonly value="Convex, Firecrawl, AgentMail, AllGasHackathon, OpenAI" />
+        <button type="button" data-copy="tags">Copy</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">Demo video (YouTube)</div>
+      <div class="row">
+        <input id="demo" readonly value="https://www.youtube.com/watch?v=2KsM090LpdE" />
+        <button type="button" data-copy="demo">Copy</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">Website</div>
+      <div class="row">
+        <input id="site" readonly value="https://quirky-rhinoceros-204.convex.site/" />
+        <button type="button" data-copy="site">Copy</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">GitHub</div>
+      <div class="row">
+        <input id="gh" readonly value="https://github.com/snowphamtom/ceilinggate" />
+        <button type="button" data-copy="gh">Copy</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">Description</div>
+      <div class="row">
+        <textarea id="desc" readonly rows="8">CeilingGate — ResidualGates line ledger for everyday money claims.
+Email a claim + public receipt URL → Firecrawl scrape → GRANT only if every line clears, else REFUSE with plain-English overages.
+
+Try: https://quirky-rhinoceros-204.convex.site/
+Repo: https://github.com/snowphamtom/ceilinggate
+Demo (YouTube silent): https://www.youtube.com/watch?v=2KsM090LpdE
+Ingress: ceilinggate-claims@agentmail.to
+
+0:00 What it is
+0:13 Reset → empty gates
+0:31 Tip Jar $50 → REFUSE
+1:13 Tip Jar $5 → GRANT
+1:49 Line Delta clear → GRANT
+2:23 $1 overages → REFUSE
+2:54 Code + live board
+
+Stack: Convex · Firecrawl · AgentMail · ResidualGates
+#ConvexAllGasHackathon</textarea>
+        <button type="button" data-copy="desc">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="step">
+    <h2><span class="step-num">3</span> Save · tell MANAGER</h2>
+    <ul class="check">
+      <li>Do <strong>not</strong> submit a second / new app</li>
+      <li>Tags should show Convex + Firecrawl + AgentMail</li>
+      <li>Demo URL is the silent YouTube</li>
+    </ul>
+    <a class="btn btn-accent" href="https://vibeapps.dev/s/ceilinggate" target="_blank" rel="noopener">Back to card to Save</a>
+    <p class="note">When saved, reply in chat: <strong>Card is updated — verify tags and demo</strong></p>
+  </section>
+
+  <div class="toast" id="toast">Copied</div>
+  <script>
+    const toast = document.getElementById('toast');
+    function flash(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(flash._t);
+      flash._t = setTimeout(() => toast.classList.remove('show'), 1400);
+    }
+    document.querySelectorAll('[data-copy]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const el = document.getElementById(btn.getAttribute('data-copy'));
+        const text = el.value;
+        try {
+          await navigator.clipboard.writeText(text);
+          flash('Copied');
+        } catch (e) {
+          el.focus();
+          el.select();
+          flash('Select → Copy');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
