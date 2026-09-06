@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** StoryForge post-commit interactivity — 2026-09-06 ~5:15 PM CT  
+After streamed/LLM scene `done`, `injectInteractiveScene(html)` wraps the document with delegated click→state (props/characters/buttons/images → highlight, inventory toast, open/close). Mid-stream partials untouched; offline `storyScene` unchanged. Timeline scrub re-applies inject.
+
 **Note:** StoryForge export + beat timeline — 2026-09-06 ~5:15 PM CT  
 Export scene `.html`, transcript `.md`/`.txt`, and client ZIP pack (`story.md` + `scene.html` + `world-bible.json`). Beat timeline scrubs via session HTML snapshots (offline re-forge fallback). Stream/mic/memory/Forge unchanged.
 
