@@ -18,6 +18,12 @@ const TEMPLATE_LABELS: Record<string, string> = {
   landing: 'Landing / waitlist',
   habit: 'Habit tracker',
   dashboard: 'Dashboard',
+  ledger: 'Line ledger',
+  countdown: 'Countdown',
+  kanban: 'Kanban board',
+  quiz: 'Quiz',
+  invoice: 'Invoice stub',
+  suite: 'Multi-section',
   llm: 'LLM forged',
 };
 

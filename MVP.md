@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** Free-tier LLM + template leap — 2026-09-06 ~4:40 PM CT  
+Providers: XAI→GEMINI→GROQ→OPENROUTER→OLLAMA→OPENAI; local Ollama `llama3.2:1b`; expanded templates (ledger/countdown/kanban/quiz/invoice + multi-section suites).
+
 **Note:** Gemini key support — 2026-09-06 ~4:05 PM CT  
 `POST /api/generate` via Vite middleware (xAI → Gemini → OpenAI); `GEMINI_API_KEY` + OpenAI-compat endpoint; async Build + “Forging your world…”; fallback toast for no key / Pages. Prior: LLM wiring, mobile studio stack, Pages base `/appforge/`.
 
@@ -12,8 +15,8 @@
 
 - Vite + React + TypeScript SPA at `/workspace/appforge`
 - Home: prompt textarea, Build, example chips, keyboard Build hint
-- **LLM generation** (local dev): `XAI_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` (priority XAI→GEMINI→OPENAI) → one perfect HTML app; `kind: 'llm'`
-- Local generator fallback: todo / tipjar / landing / habit / dashboard
+- **LLM generation** (local dev): XAI→GEMINI→GROQ→OPENROUTER→OLLAMA→OPENAI → `kind: 'llm'`
+- Local generator fallback: todo / tipjar / landing / habit / dashboard / ledger / countdown / kanban / quiz / invoice (+ suites)
 - Studio: editable HTML (Source) + sandboxed iframe (Live), debounced preview, empty-state
 - Regenerate, New prompt, Download `.html`, Copy HTML
 - Recent projects list (localStorage, last 5) on home

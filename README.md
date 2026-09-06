@@ -9,7 +9,7 @@ Local `npm run dev` can call an LLM via `POST /api/generate` (API key stays on t
 ```bash
 cd /workspace/appforge
 npm install
-cp .env.example .env   # then add XAI_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY
+cp .env.example .env   # then add a free key (GROQ/OPENROUTER) or OLLAMA_*, or XAI/GEMINI/OPENAI
 npm run dev
 ```
 
@@ -26,8 +26,8 @@ npm run preview      # serve the build
 ## LLM generation (local / dev)
 
 1. Copy `.env.example` → `.env` (or `.env.local`).
-2. Set one key (priority **XAI → GEMINI → OPENAI**): **`XAI_API_KEY`** ([api.x.ai](https://api.x.ai)), **`GEMINI_API_KEY`** ([Google AI Studio](https://aistudio.google.com/) / Gemini OpenAI-compat), or `OPENAI_API_KEY`.
-3. Models: xAI `grok-2-latest` (or `grok-3` via `XAI_MODEL`); Gemini `gemini-2.0-flash` (`GEMINI_MODEL`); OpenAI `gpt-4o-mini`.
+2. Set one provider (priority **XAI → GEMINI → GROQ → OPENROUTER → OLLAMA → OPENAI**): **`XAI_API_KEY`**, **`GEMINI_API_KEY`**, free **`GROQ_API_KEY`** / **`OPENROUTER_API_KEY`**, local **`OLLAMA_BASE_URL`** + **`OLLAMA_MODEL`** (default `llama3.2:1b`), or `OPENAI_API_KEY`.
+3. Models: xAI `grok-2-latest`; Gemini `gemini-2.5-flash`; Groq `llama-3.3-70b-versatile`; OpenRouter `openrouter/auto`; Ollama `llama3.2:1b`; OpenAI `gpt-4o-mini`.
 4. Build sends `{ prompt }` to `/api/generate` and returns `{ html, title, kind: 'llm', model }`. Env files are loaded per request — no restart required for `.env` / `.env.local` changes.
 5. On failure (no key / network / static host), AppForge uses local templates and toasts: *Using local templates (add API key for LLM)*.
 
