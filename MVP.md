@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** StoryForge speech + stream polish — 2026-09-06 ~5:00 PM CT  
+Web Speech mic dictate→commit beat (graceful unsupported fallback); clearer queued/updating status; ~1s debounce; hardened abort; demo story auto-forge; preview update overlay (no paid speech).
+
 **Note:** StoryForge mode — 2026-09-06 ~4:55 PM CT  
 Verbal→visual story stream: `mode: "story"` + `priorHtml` on `/api/generate`; live iframe; debounce + beat commit; offline `storyScene` fallback. One-shot forge unchanged.
 

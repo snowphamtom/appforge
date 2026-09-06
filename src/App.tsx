@@ -3,6 +3,12 @@ import './App.css';
 import { EXAMPLE_PROMPTS, generateApp, type GenerateResult } from './lib/generator';
 import { generateStoryScene } from './lib/storyScene';
 import {
+  createSpeechRecognition,
+  isSpeechSupported,
+  transcriptsFromEvent,
+  type SpeechRec,
+} from './lib/speech';
+import {
   listRecentProjects,
   saveGenerationLocal,
   type ProjectRecord,
@@ -12,7 +18,7 @@ import { seedFromUrl } from './integrations/firecrawl';
 type View = 'home' | 'studio' | 'story';
 
 const DEBOUNCE_MS = 350;
-const STORY_DEBOUNCE_MS = 1500;
+const STORY_DEBOUNCE_MS = 1000;
 
 const TEMPLATE_LABELS: Record<string, string> = {
   todo: 'Todo list',
@@ -128,6 +134,9 @@ export default function App() {
   const [storyUpdating, setStoryUpdating] = useState(false);
   const [storyUsedFallback, setStoryUsedFallback] = useState(false);
   const [storyModel, setStoryModel] = useState<string | undefined>();
+  const [storyQueued, setStoryQueued] = useState(false);
+  const [storyListening, setStoryListening] = useState(false);
+  const [speechSupported] = useState(() => isSpeechSupported());
 
   const debounceRef = useRef<number | null>(null);
   const storyDebounceRef = useRef<number | null>(null);
@@ -135,6 +144,10 @@ export default function App() {
   const storyTicketRef = useRef(0);
   const storyAbortRef = useRef<AbortController | null>(null);
   const storyHtmlRef = useRef('');
+  const storyTextRef = useRef('');
+  const storyDraftRef = useRef('');
+  const speechRecRef = useRef<SpeechRec | null>(null);
+  const speechBaseDraftRef = useRef('');
   const previewBlobRef = useRef<string | null>(null);
 
   const refreshRecent = useCallback(() => {
@@ -148,6 +161,14 @@ export default function App() {
   useEffect(() => {
     storyHtmlRef.current = storyHtml;
   }, [storyHtml]);
+
+  useEffect(() => {
+    storyTextRef.current = storyText;
+  }, [storyText]);
+
+  useEffect(() => {
+    storyDraftRef.current = storyDraft;
+  }, [storyDraft]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -206,6 +227,12 @@ export default function App() {
       const trimmed = fullStory.trim();
       if (!trimmed) return;
 
+      if (storyDebounceRef.current) {
+        window.clearTimeout(storyDebounceRef.current);
+        storyDebounceRef.current = null;
+      }
+      setStoryQueued(false);
+
       storyAbortRef.current?.abort();
       const ac = new AbortController();
       storyAbortRef.current = ac;
@@ -223,8 +250,11 @@ export default function App() {
             priorHtml: prior,
             signal: ac.signal,
           });
-        } catch {
+        } catch (err) {
           if (ac.signal.aborted || ticket !== storyTicketRef.current) return;
+          // AbortError / fetch abort should never become an offline scene
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          if (err instanceof Error && err.name === 'AbortError') return;
           gen = generateStoryScene(trimmed);
           usedFallback = true;
         }
@@ -247,7 +277,10 @@ export default function App() {
           showToast('Using offline StoryForge scene (add API key for LLM)');
         }
       } finally {
-        if (ticket === storyTicketRef.current) setStoryUpdating(false);
+        if (ticket === storyTicketRef.current) {
+          setStoryUpdating(false);
+          setStoryQueued(false);
+        }
       }
     },
     [refreshRecent, showToast],
@@ -256,7 +289,10 @@ export default function App() {
   const scheduleStoryGenerate = useCallback(
     (fullStory: string) => {
       if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
+      setStoryQueued(true);
       storyDebounceRef.current = window.setTimeout(() => {
+        storyDebounceRef.current = null;
+        setStoryQueued(false);
         void runStoryGenerate(fullStory);
       }, STORY_DEBOUNCE_MS);
     },
@@ -269,28 +305,127 @@ export default function App() {
 
   const onStoryTextChange = (value: string) => {
     setStoryText(value);
+    storyTextRef.current = value;
     const beats = value
       .split(/\n+/)
       .map((b) => b.trim())
       .filter(Boolean);
     setStoryBeats(beats);
     if (value.trim()) scheduleStoryGenerate(value);
+    else {
+      if (storyDebounceRef.current) {
+        window.clearTimeout(storyDebounceRef.current);
+        storyDebounceRef.current = null;
+      }
+      setStoryQueued(false);
+    }
   };
 
-  const commitBeat = () => {
-    const draft = storyDraft.trim();
-    if (!draft) return;
-    const next = storyText.trim() ? `${storyText.trim()}\n\n${draft}` : draft;
-    setStoryText(next);
-    setStoryDraft('');
-    const beats = next
-      .split(/\n+/)
-      .map((b) => b.trim())
-      .filter(Boolean);
-    setStoryBeats(beats);
-    if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
-    void runStoryGenerate(next);
-  };
+  const commitBeat = useCallback(
+    (raw?: string) => {
+      const draft = (raw ?? storyDraftRef.current).trim();
+      if (!draft) return;
+      const base = storyTextRef.current.trim();
+      const next = base ? `${base}\n\n${draft}` : draft;
+      setStoryText(next);
+      storyTextRef.current = next;
+      setStoryDraft('');
+      storyDraftRef.current = '';
+      const beats = next
+        .split(/\n+/)
+        .map((b) => b.trim())
+        .filter(Boolean);
+      setStoryBeats(beats);
+      if (storyDebounceRef.current) {
+        window.clearTimeout(storyDebounceRef.current);
+        storyDebounceRef.current = null;
+      }
+      setStoryQueued(false);
+      void runStoryGenerate(next);
+    },
+    [runStoryGenerate],
+  );
+
+  const stopSpeech = useCallback(() => {
+    const rec = speechRecRef.current;
+    if (rec) {
+      try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.stop();
+      } catch {
+        try {
+          rec.abort();
+        } catch {
+          /* ignore */
+        }
+      }
+      speechRecRef.current = null;
+    }
+    setStoryListening(false);
+  }, []);
+
+  const toggleSpeech = useCallback(() => {
+    if (!speechSupported) {
+      showToast('Speech dictation not supported in this browser');
+      return;
+    }
+    if (storyListening) {
+      stopSpeech();
+      return;
+    }
+    const rec = createSpeechRecognition();
+    if (!rec) {
+      showToast('Speech dictation not supported in this browser');
+      return;
+    }
+    speechBaseDraftRef.current = storyDraftRef.current;
+    speechRecRef.current = rec;
+    rec.onresult = (ev) => {
+      const { interim, final } = transcriptsFromEvent(ev);
+      if (final) {
+        const base = speechBaseDraftRef.current.trim();
+        const spoken = final.trim();
+        const combined = base ? `${base} ${spoken}`.trim() : spoken;
+        stopSpeech();
+        commitBeat(combined);
+        showToast('Beat dictated');
+        return;
+      }
+      if (interim) {
+        const base = speechBaseDraftRef.current;
+        const next = base ? `${base} ${interim}`.trim() : interim;
+        setStoryDraft(next);
+        storyDraftRef.current = next;
+      }
+    };
+    rec.onerror = (ev) => {
+      const code = ev.error || 'error';
+      stopSpeech();
+      if (code === 'aborted' || code === 'no-speech') return;
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        showToast('Mic permission blocked — allow microphone to dictate');
+        return;
+      }
+      showToast(`Speech error: ${code}`);
+    };
+    rec.onend = () => {
+      if (speechRecRef.current === rec) {
+        speechRecRef.current = null;
+        setStoryListening(false);
+      }
+    };
+    try {
+      rec.start();
+      setStoryListening(true);
+      showToast('Listening… speak a beat');
+    } catch {
+      speechRecRef.current = null;
+      setStoryListening(false);
+      showToast('Could not start microphone');
+    }
+  }, [commitBeat, showToast, speechSupported, stopSpeech, storyListening]);
 
   const onBuild = () => {
     void runGenerate(prompt);
@@ -338,6 +473,18 @@ export default function App() {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
       storyAbortRef.current?.abort();
+      const rec = speechRecRef.current;
+      if (rec) {
+        try {
+          rec.onresult = null;
+          rec.onerror = null;
+          rec.onend = null;
+          rec.abort();
+        } catch {
+          /* ignore */
+        }
+        speechRecRef.current = null;
+      }
       if (previewBlobRef.current) {
         URL.revokeObjectURL(previewBlobRef.current);
         previewBlobRef.current = null;
@@ -415,16 +562,31 @@ export default function App() {
   };
 
   const loadStoryExample = () => {
-    const text = STORY_EXAMPLES.join('\n\n');
-    setStoryText(text);
+    stopSpeech();
+    const demo = STORY_EXAMPLES.join('\n\n');
+    setStoryText(demo);
+    storyTextRef.current = demo;
+    setStoryDraft('');
+    storyDraftRef.current = '';
     setStoryBeats(
-      text
+      demo
         .split(/\n+/)
         .map((b) => b.trim())
         .filter(Boolean),
     );
-    if (storyDebounceRef.current) window.clearTimeout(storyDebounceRef.current);
-    void runStoryGenerate(text);
+    // Fresh world for demo magic — do not evolve prior HTML
+    setStoryHtml('');
+    storyHtmlRef.current = '';
+    setStoryTitle('StoryForge');
+    setStoryUsedFallback(false);
+    setStoryModel(undefined);
+    if (storyDebounceRef.current) {
+      window.clearTimeout(storyDebounceRef.current);
+      storyDebounceRef.current = null;
+    }
+    setStoryQueued(false);
+    showToast('Demo story loaded — forging the scene…');
+    void runStoryGenerate(demo);
   };
 
   const iframeSrcDoc = useMemo(() => previewHtml, [previewHtml]);
@@ -662,11 +824,23 @@ export default function App() {
               <span className="studio-status-title" title={storyTitle}>
                 {storyTitle}
               </span>
-              {storyUpdating && (
+              <span className="studio-status-sep" aria-hidden>
+                ·
+              </span>
+              <span className="studio-status-beats">{storyBeats.length} beats</span>
+              {storyUpdating ? (
                 <span className="scene-updating" aria-live="polite">
                   scene updating…
                 </span>
-              )}
+              ) : storyQueued ? (
+                <span className="scene-queued" aria-live="polite">
+                  scene queued…
+                </span>
+              ) : storyListening ? (
+                <span className="scene-listening" aria-live="polite">
+                  listening…
+                </span>
+              ) : null}
             </div>
 
             <div className="pane pane-story">
@@ -687,7 +861,7 @@ export default function App() {
                   className="story-transcript"
                   value={storyText}
                   onChange={(e) => onStoryTextChange(e.target.value)}
-                  placeholder="Type your story… pauses (~1.5s) refresh the scene. Or add beats below."
+                  placeholder="Type your story… pauses (~1s) refresh the scene. Dictate or add beats below."
                   spellCheck
                 />
                 {storyBeats.length > 0 && (
@@ -709,31 +883,74 @@ export default function App() {
                     type="text"
                     className="story-draft"
                     value={storyDraft}
-                    onChange={(e) => setStoryDraft(e.target.value)}
-                    placeholder="Next beat — Enter to commit"
+                    onChange={(e) => {
+                      setStoryDraft(e.target.value);
+                      storyDraftRef.current = e.target.value;
+                    }}
+                    placeholder={
+                      storyListening
+                        ? 'Listening… speak a beat'
+                        : 'Next beat — Enter to commit'
+                    }
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         commitBeat();
                       }
                     }}
+                    disabled={storyListening}
                   />
                   <button
                     type="button"
+                    className={`btn btn-mic${storyListening ? ' btn-mic-live' : ''}${!speechSupported ? ' btn-mic-unsupported' : ''}`}
+                    onClick={toggleSpeech}
+                    disabled={!speechSupported}
+                    aria-pressed={storyListening}
+                    title={
+                      speechSupported
+                        ? storyListening
+                          ? 'Stop dictation'
+                          : 'Dictate beat (Web Speech)'
+                        : 'Speech not supported in this browser'
+                    }
+                    aria-label={
+                      speechSupported
+                        ? storyListening
+                          ? 'Stop dictation'
+                          : 'Dictate beat with microphone'
+                        : 'Speech dictation not supported'
+                    }
+                  >
+                    <span aria-hidden>{storyListening ? '⏹' : '🎤'}</span>
+                    <span className="btn-mic-label">
+                      {storyListening ? 'Stop' : 'Mic'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
                     className="btn btn-primary"
-                    onClick={commitBeat}
-                    disabled={!storyDraft.trim()}
+                    onClick={() => commitBeat()}
+                    disabled={!storyDraft.trim() || storyListening}
                   >
                     Commit beat
                   </button>
                 </div>
+                {!speechSupported && (
+                  <p className="speech-fallback-note" role="note">
+                    Mic dictation unavailable here — type beats instead (Chrome/Edge usually support
+                    free Web Speech).
+                  </p>
+                )}
                 <div className="story-tools">
                   <button type="button" className="btn btn-secondary" onClick={loadStoryExample}>
                     Load demo story
                   </button>
                   <span className="kbd-hint">
                     <kbd>Enter</kbd>
-                    <span className="kbd-hint-text">commits beat · typing pauses refresh scene</span>
+                    <span className="kbd-hint-text">
+                      commits beat · ~1s pause refreshes scene
+                      {speechSupported ? ' · Mic dictates a beat' : ''}
+                    </span>
                   </span>
                 </div>
               </div>
@@ -757,12 +974,19 @@ export default function App() {
                 </div>
               </div>
               {hasStory ? (
-                <iframe
-                  className="preview-frame"
-                  title="StoryForge live preview"
-                  sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
-                  srcDoc={storyIframeSrcDoc}
-                />
+                <div className="preview-shell">
+                  <iframe
+                    className="preview-frame"
+                    title="StoryForge live preview"
+                    sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
+                    srcDoc={storyIframeSrcDoc}
+                  />
+                  {storyUpdating && (
+                    <div className="preview-updating" aria-hidden>
+                      <span>Updating scene…</span>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="empty-state empty-state-live" role="status">
                   <p className="empty-title">Scene waits for a story</p>
