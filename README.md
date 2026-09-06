@@ -58,6 +58,9 @@ Mode inside AppForge (toggle **StoryForge** in the top bar). Not a separate prod
 6. New beats **abort** in-flight streams; status shows **scene streaming…** / **scene updating…**.
 7. Fallbacks: non-stream `POST /api/generate`, then offline `src/lib/storyScene.ts` if LLM/stream fails.
 8. **World bible** — editable Characters / Setting / Props / Mood chips (heuristic extract from story + manual edits). Sent as `worldMemory` on generate/stream so scenes stay consistent; also honored offline. Draft (story + bible) persists in `localStorage`.
+9. **Export pack** — from Story tools: **Scene .html**, **Transcript .md** / **.txt**, or **Pack .zip** (`story.md` + `scene.html` + `world-bible.json`, zero-dep client ZIP). Top-bar **Download** still saves the current scene HTML.
+10. **Beat timeline** — committed beats are clickable. Prefer session HTML snapshots per beat for instant scrub; if a beat has no snapshot yet, StoryForge offline-forges a scene from the story truncated through that beat (does not overwrite the tip `priorHtml`). Status shows **scrubbing beat N**. Refresh / new forge returns to live tip.
+11. **Mid-stream clicks** — while tokens stream, the scene HTML may be incomplete (props/buttons often not wired yet). The updating overlay uses `pointer-events: none` so it does not block the iframe; wait for stream **done** (or Refresh) for reliable click→state. Scrubbing a prior beat restores a finished snapshot.
 
 Keeps one-shot Forge + remix studio unchanged. No Convex attach. No payments.
 

@@ -15,6 +15,15 @@ import {
   type WorldMemory,
 } from './lib/worldMemory';
 import {
+  buildStoryExportZip,
+  downloadBlob,
+  downloadTextFile,
+  formatStoryTranscriptMd,
+  formatStoryTranscriptTxt,
+  pruneBeatSnapshots,
+  slugFilename,
+} from './lib/storyExport';
+import {
   createSpeechRecognition,
   isSpeechSupported,
   transcriptsFromEvent,
@@ -162,6 +171,10 @@ export default function App() {
   });
   const [memoryMoodDraft, setMemoryMoodDraft] = useState('');
   const [draftHydrated, setDraftHydrated] = useState(false);
+  /** Beat index currently scrubbed in the live pane (null = tip / live). */
+  const [scrubBeatIndex, setScrubBeatIndex] = useState<number | null>(null);
+  /** Beat indices that currently have session HTML snapshots (timeline dots). */
+  const [beatSnapKeys, setBeatSnapKeys] = useState<number[]>([]);
 
   const debounceRef = useRef<number | null>(null);
   const storyDebounceRef = useRef<number | null>(null);
@@ -171,6 +184,9 @@ export default function App() {
   const storyHtmlRef = useRef('');
   /** Last fully committed scene — used as priorHtml (not mid-stream partials). */
   const storyCommittedHtmlRef = useRef('');
+  /** Session Map: beat index → last known scene HTML after that beat forged. */
+  const beatSnapshotsRef = useRef<Map<number, string>>(new Map());
+  const storyBeatsRef = useRef<string[]>([]);
   const storyTextRef = useRef('');
   const storyDraftRef = useRef('');
   const worldMemoryRef = useRef<WorldMemory>({ ...EMPTY_WORLD_MEMORY });
@@ -197,6 +213,17 @@ export default function App() {
   useEffect(() => {
     storyDraftRef.current = storyDraft;
   }, [storyDraft]);
+
+  useEffect(() => {
+    const prev = storyBeatsRef.current;
+    if (pruneBeatSnapshots(beatSnapshotsRef.current, prev, storyBeats)) {
+      setBeatSnapKeys([...beatSnapshotsRef.current.keys()].sort((a, b) => a - b));
+      setScrubBeatIndex((idx) =>
+        idx !== null && idx >= storyBeats.length ? null : idx,
+      );
+    }
+    storyBeatsRef.current = storyBeats;
+  }, [storyBeats]);
 
   useEffect(() => {
     worldMemoryRef.current = worldMemory;
@@ -297,6 +324,7 @@ export default function App() {
         storyDebounceRef.current = null;
       }
       setStoryQueued(false);
+      setScrubBeatIndex(null);
 
       storyAbortRef.current?.abort();
       const ac = new AbortController();
@@ -373,6 +401,16 @@ export default function App() {
         setStoryUsedFallback(usedFallback);
         storyHtmlRef.current = gen.html;
         storyCommittedHtmlRef.current = gen.html;
+        {
+          const beats = trimmed
+            .split(/\n+/)
+            .map((b) => b.trim())
+            .filter(Boolean);
+          if (beats.length > 0 && gen.html.trim()) {
+            beatSnapshotsRef.current.set(beats.length - 1, gen.html);
+            setBeatSnapKeys([...beatSnapshotsRef.current.keys()].sort((a, b) => a - b));
+          }
+        }
 
         saveGenerationLocal({
           prompt: trimmed,
@@ -558,6 +596,16 @@ export default function App() {
       setStoryTitle(rec.title);
       storyHtmlRef.current = rec.html;
       storyCommittedHtmlRef.current = rec.html;
+      beatSnapshotsRef.current.clear();
+      if (rec.html.trim()) {
+        const n = rec.prompt
+          .split(/\n+/)
+          .map((b) => b.trim())
+          .filter(Boolean).length;
+        if (n > 0) beatSnapshotsRef.current.set(n - 1, rec.html);
+      }
+      setBeatSnapKeys([...beatSnapshotsRef.current.keys()].sort((a, b) => a - b));
+      setScrubBeatIndex(null);
       const mem = extractWorldMemory(rec.prompt);
       setWorldMemory(mem);
       worldMemoryRef.current = mem;
@@ -630,6 +678,86 @@ export default function App() {
     downloadHtml(html, title);
     showToast('Downloaded .html');
   };
+
+  const onExportTranscript = (fmt: 'md' | 'txt' = 'md') => {
+    if (!storyText.trim() && storyBeats.length === 0) {
+      showToast('Nothing to export yet');
+      return;
+    }
+    const slug = slugFilename(storyTitle);
+    if (fmt === 'txt') {
+      const body = formatStoryTranscriptTxt({
+        title: storyTitle,
+        storyText,
+        beats: storyBeats,
+        worldMemory,
+      });
+      downloadTextFile(body, `${slug}-transcript.txt`, 'text/plain');
+      showToast('Downloaded transcript .txt');
+      return;
+    }
+    const body = formatStoryTranscriptMd({
+      title: storyTitle,
+      storyText,
+      beats: storyBeats,
+      worldMemory,
+    });
+    downloadTextFile(body, `${slug}-transcript.md`, 'text/markdown');
+    showToast('Downloaded transcript .md');
+  };
+
+  const onExportPack = () => {
+    const html = storyHtml.trim() || storyCommittedHtmlRef.current.trim();
+    if (!html && !storyText.trim()) {
+      showToast('Nothing to export yet');
+      return;
+    }
+    const slug = slugFilename(storyTitle);
+    const blob = buildStoryExportZip({
+      title: storyTitle,
+      storyText,
+      beats: storyBeats,
+      worldMemory,
+      sceneHtml: html,
+    });
+    downloadBlob(blob, `${slug}-pack.zip`);
+    showToast('Downloaded export pack (.zip)');
+  };
+
+  const scrubToBeat = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= storyBeatsRef.current.length) return;
+      storyAbortRef.current?.abort();
+      if (storyDebounceRef.current) {
+        window.clearTimeout(storyDebounceRef.current);
+        storyDebounceRef.current = null;
+      }
+      setStoryQueued(false);
+      setStoryUpdating(false);
+      setStoryStreaming(false);
+
+      const snap = beatSnapshotsRef.current.get(index);
+      if (snap && snap.trim()) {
+        setStoryHtml(snap);
+        storyHtmlRef.current = snap;
+        setScrubBeatIndex(index);
+        showToast(`Scrubbed to beat ${index + 1}`);
+        return;
+      }
+      // No snapshot — offline re-forge from story truncated to this beat
+      // (does not mutate tip priorHtml / committed scene).
+      const truncated = storyBeatsRef.current.slice(0, index + 1).join('\n\n');
+      if (!truncated.trim()) return;
+      const gen = generateStoryScene(truncated, worldMemoryRef.current);
+      setStoryHtml(gen.html);
+      storyHtmlRef.current = gen.html;
+      beatSnapshotsRef.current.set(index, gen.html);
+      setBeatSnapKeys([...beatSnapshotsRef.current.keys()].sort((a, b) => a - b));
+      setScrubBeatIndex(index);
+      showToast(`Re-forged offline scene at beat ${index + 1}`);
+    },
+    [showToast],
+  );
 
   const onCopy = async () => {
     const html = view === 'story' ? storyHtml : source;
@@ -744,6 +872,9 @@ export default function App() {
     setStoryHtml('');
     storyHtmlRef.current = '';
     storyCommittedHtmlRef.current = '';
+    beatSnapshotsRef.current.clear();
+    setBeatSnapKeys([]);
+    setScrubBeatIndex(null);
     const fresh = extractWorldMemory(demo);
     setWorldMemory(fresh);
     worldMemoryRef.current = fresh;
@@ -1021,6 +1152,10 @@ export default function App() {
                 <span className="scene-listening" aria-live="polite">
                   listening…
                 </span>
+              ) : scrubBeatIndex !== null ? (
+                <span className="scene-scrubbing" aria-live="polite">
+                  scrubbing beat {scrubBeatIndex + 1}
+                </span>
               ) : null}
             </div>
 
@@ -1134,13 +1269,33 @@ export default function App() {
                   spellCheck
                 />
                 {storyBeats.length > 0 && (
-                  <ol className="story-beats" aria-label="Committed beats">
-                    {storyBeats.map((b, i) => (
-                      <li key={`${i}-${b.slice(0, 24)}`}>
-                        <span className="beat-n">{i + 1}</span>
-                        <span className="beat-t">{b}</span>
-                      </li>
-                    ))}
+                  <ol className="story-beats" aria-label="Beat timeline">
+                    {storyBeats.map((b, i) => {
+                      const hasSnap = beatSnapKeys.includes(i);
+                      const active = scrubBeatIndex === i;
+                      const isTip =
+                        scrubBeatIndex === null && i === storyBeats.length - 1;
+                      return (
+                        <li key={`${i}-${b.slice(0, 24)}`}>
+                          <button
+                            type="button"
+                            className={`beat-btn${active || isTip ? ' beat-btn-active' : ''}${hasSnap ? ' beat-btn-snap' : ''}`}
+                            onClick={() => scrubToBeat(i)}
+                            title={
+                              hasSnap
+                                ? `Show scene snapshot after beat ${i + 1}`
+                                : `No snapshot yet — re-forge through beat ${i + 1}`
+                            }
+                          >
+                            <span className="beat-n">{i + 1}</span>
+                            <span className="beat-t">{b}</span>
+                            {hasSnap ? (
+                              <span className="beat-snap-dot" aria-hidden />
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ol>
                 )}
                 <div className="story-compose">
@@ -1219,8 +1374,48 @@ export default function App() {
                     <span className="kbd-hint-text">
                       commits beat · ~1s pause refreshes scene
                       {speechSupported ? ' · Mic dictates a beat' : ''}
+                      {' · click a beat to scrub'}
                     </span>
                   </span>
+                </div>
+                <div className="story-export" role="group" aria-label="Export pack">
+                  <span className="story-export-label">Export</span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={onDownload}
+                    disabled={!hasStory}
+                    title="Download current scene as .html"
+                  >
+                    Scene .html
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => onExportTranscript('md')}
+                    disabled={!storyText.trim() && storyBeats.length === 0}
+                    title="Download story transcript as Markdown"
+                  >
+                    Transcript .md
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => onExportTranscript('txt')}
+                    disabled={!storyText.trim() && storyBeats.length === 0}
+                    title="Download story transcript as plain text"
+                  >
+                    Transcript .txt
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={onExportPack}
+                    disabled={!hasStory && !storyText.trim()}
+                    title="ZIP: story.md + scene.html + world-bible.json"
+                  >
+                    Pack .zip
+                  </button>
                 </div>
               </div>
             </div>
