@@ -5,6 +5,9 @@
 
 ## Iterated studio
 
+**Note:** StoryForge live HTML stream — 2026-09-06 ~5:00 PM CT  
+SSE `/api/generate/stream` yields token deltas; StoryForge updates iframe `srcDoc` on HTML checkpoints; abort on new beat; non-stream `/api/generate` + offline `storyScene` remain fallbacks.
+
 **Note:** StoryForge speech + stream polish — 2026-09-06 ~5:00 PM CT  
 Web Speech mic dictate→commit beat (graceful unsupported fallback); clearer queued/updating status; ~1s debounce; hardened abort; demo story auto-forge; preview update overlay (no paid speech).
 
