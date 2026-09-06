@@ -5,8 +5,8 @@
 
 ## Iterated studio
 
-**Note:** Iterated studio (local polish) — 2026-09-06 3:40 PM CT  
-Clearer Prompt / Source / Live labels, ⌘/Ctrl+Enter Build hint on home, empty-state when no build, recent localStorage projects (last 5) with click-to-reopen, template quality bump (typography + one interactive beat each). Vite `base` stays `/` for local; `npm run build:pages` sets `GITHUB_PAGES=1` → `/appforge/` for GH Pages. Convex remains stubs only (no live deploy attach).
+**Note:** Iterated studio (local polish) — 2026-09-06 3:45 PM CT  
+Mobile studio stacks Source above Live; Open preview (blob URL) in topbar + Live pane; waitlist example chip; post-build template status line; secondary-button disabled styles. Prior: Prompt/Source/Live labels, ⌘/Ctrl+Enter, empty-state, recent projects, template bump. Vite `base` `/` local; `build:pages` → `/appforge/`. Convex stubs only.
 
 ## In scope (v0)
 

@@ -12,6 +12,14 @@ type View = 'home' | 'studio';
 
 const DEBOUNCE_MS = 350;
 
+const TEMPLATE_LABELS: Record<string, string> = {
+  todo: 'Todo list',
+  tipjar: 'Tip jar',
+  landing: 'Landing / waitlist',
+  habit: 'Habit tracker',
+  dashboard: 'Dashboard',
+};
+
 function downloadHtml(html: string, title: string) {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -47,6 +55,7 @@ export default function App() {
   const [recent, setRecent] = useState<ProjectRecord[]>([]);
   const [seeding, setSeeding] = useState(false);
   const debounceRef = useRef<number | null>(null);
+  const previewBlobRef = useRef<string | null>(null);
 
   const refreshRecent = useCallback(() => {
     setRecent(listRecentProjects(5));
@@ -117,6 +126,10 @@ export default function App() {
   useEffect(() => {
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      if (previewBlobRef.current) {
+        URL.revokeObjectURL(previewBlobRef.current);
+        previewBlobRef.current = null;
+      }
     };
   }, []);
 
@@ -149,6 +162,23 @@ export default function App() {
     } catch {
       showToast('Clipboard blocked — select source and copy manually');
     }
+  };
+
+  const onOpenPreview = () => {
+    if (!source.trim()) return;
+    if (previewBlobRef.current) {
+      URL.revokeObjectURL(previewBlobRef.current);
+      previewBlobRef.current = null;
+    }
+    const blob = new Blob([source], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    previewBlobRef.current = url;
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      showToast('Popup blocked — allow popups to open preview');
+      return;
+    }
+    showToast('Opened preview in new tab');
   };
 
   const onUrlSeed = async () => {
@@ -197,6 +227,15 @@ export default function App() {
             </button>
             <button type="button" className="btn btn-secondary" onClick={onCopy} disabled={!hasBuild}>
               Copy HTML
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onOpenPreview}
+              disabled={!hasBuild}
+              title="Open current HTML in a new tab via blob URL"
+            >
+              Open preview
             </button>
           </div>
         )}
@@ -316,7 +355,22 @@ export default function App() {
           </section>
         ) : (
           <section className="studio" aria-label="Remix studio">
-            <div className="pane">
+            <div className="studio-status" role="status">
+              <span className="studio-status-label">Template</span>
+              <span className="studio-status-value">
+                {result ? (TEMPLATE_LABELS[result.kind] ?? result.kind) : '—'}
+              </span>
+              <span className="studio-status-sep" aria-hidden>
+                ·
+              </span>
+              <span
+                className="studio-status-title"
+                title={result?.title || undefined}
+              >
+                {result?.title || 'No build yet'}
+              </span>
+            </div>
+            <div className="pane pane-source">
               <div className="pane-header">
                 <span>Source</span>
                 <span className="pane-meta">{result?.kind ?? 'app'}</span>
@@ -342,10 +396,22 @@ export default function App() {
                 </div>
               )}
             </div>
-            <div className="pane">
+            <div className="pane pane-live">
               <div className="pane-header">
                 <span>Live</span>
-                <span className="pane-meta">{result?.title || 'preview'}</span>
+                <div className="pane-header-right">
+                  <span className="pane-meta">{result?.title || 'preview'}</span>
+                  {hasBuild && (
+                    <button
+                      type="button"
+                      className="pane-action"
+                      onClick={onOpenPreview}
+                      title="Open preview in new tab"
+                    >
+                      Open ↗
+                    </button>
+                  )}
+                </div>
               </div>
               {hasBuild ? (
                 <iframe

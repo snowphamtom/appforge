@@ -502,4 +502,5 @@ export const EXAMPLE_PROMPTS = [
   { label: 'tip jar', prompt: 'A tip jar for my creative work' },
   { label: 'landing page', prompt: 'A landing page for my SaaS waitlist' },
   { label: 'habit tracker', prompt: 'A daily habit tracker with streaks' },
+  { label: 'waitlist', prompt: 'A waitlist landing page with email signup for my product launch' },
 ] as const;
